@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: creatorconnect-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: creatorconnect
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  service-registry:
+    build: ./backend/service-registry
+    container_name: creatorconnect-registry
+    ports:
+      - "8761:8761"
+    networks:
+      - creatorconnect-network
+
+  api-gateway:
+    build: ./backend/api-gateway
+    container_name: creatorconnect-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-registry:8761/eureka/
+    depends_on:
+      - service-registry
+    networks:
+      - creatorconnect-network
+
+networks:
+  creatorconnect-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
