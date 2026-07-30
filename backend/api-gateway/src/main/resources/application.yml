@@ -1,0 +1,80 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+          - id: auth-service
+            uri: lb://auth-service
+            predicates:
+              - Path=/auth/**
+          - id: profile-service
+            uri: lb://profile-service
+            predicates:
+              - Path=/profile/**
+          - id: project-service
+            uri: lb://project-service
+            predicates:
+              - Path=/projects/**
+          - id: hiring-service
+            uri: lb://hiring-service
+            predicates:
+              - Path=/hiring/**
+          - id: ai-service
+            uri: lb://ai-service
+            predicates:
+              - Path=/ai/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+    registry-fetch-interval-seconds: 5
+  instance:
+    hostname: localhost
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 10
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,env,metrics
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    gateway:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: CreatorConnect API Gateway
+    description: Spring Cloud Gateway MVC — Single Entry Point for all client requests
+    version: 1.0.0
+    java-version: ${java.version}
+    spring-boot-version: 3.5.16
+    spring-cloud-version: 2025.0.3
+
+logging:
+  level:
+    com.creatorconnect.gateway: DEBUG
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.web: DEBUG
+    org.springframework.web.filter.CommonsRequestLoggingFilter: DEBUG
+    com.netflix.discovery: INFO
+    com.netflix.eureka: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
