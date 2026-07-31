@@ -16,6 +16,7 @@
     <modules>
         <module>service-registry</module>
         <module>api-gateway</module>
+        <module>auth-service</module>
     </modules>
 
     <!-- Spring Boot Parent -->
