@@ -39,12 +39,13 @@ eureka:
     lease-renewal-interval-in-seconds: 5
     lease-expiration-duration-in-seconds: 10
 
-# JWT configuration — consumed by the security layer (Phase 8)
+# JWT configuration — consumed by config.JwtProperties and the security layer
 # WARNING: Replace the secret with a strong, randomly generated value (>= 256 bits) before production.
 app:
   jwt:
     secret: Y3JlYXRvcmNvbm5lY3Qtc3VwZXItc2VjcmV0LWtleS1jaGFuZ2UtbWUtYmVmb3JlLXByb2R1Y3Rpb24tMjAyNg==
     expiration-ms: 86400000
+    issuer: creatorconnect-auth-service
 
 management:
   endpoints:

@@ -1,5 +1,7 @@
 package com.creatorconnect.auth.config;
 
+import com.creatorconnect.auth.security.JwtAuthenticationFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,10 +21,13 @@ import org.springframework.security.web.SecurityFilterChain;
  *       intentionally slow and salted, which is the recommended choice for
  *       password storage.</li>
  *   <li><b>{@link SecurityFilterChain}</b> — a stateless chain that permits the
- *       public registration endpoint (plus actuator health and Swagger UI)
- *       while keeping every other route authenticated. This is the Day 4
- *       baseline; once the JWT layer lands (Phase 8) the chain is tightened to
- *       enforce bearer tokens via a custom filter.</li>
+ *       public registration/login endpoints (plus actuator health and Swagger
+ *       UI) while keeping every other route authenticated. This is the Day 4/5
+ *       baseline; once protected endpoints land, the chain is tightened to
+ *       enforce bearer tokens via the prepared {@link JwtAuthenticationFilter}.</li>
+ *   <li><b>{@link #jwtAuthenticationFilterRegistration(JwtAuthenticationFilter)}</b>
+ *       — keeps Spring Boot from auto-registering the prepared JWT filter as a
+ *       servlet-level filter before Day 6 wires it into the chain.</li>
  * </ul>
  *
  * <p>CSRF is disabled because the API is stateless (no cookies) and all
@@ -57,6 +62,7 @@ public class SecurityBeansConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/register",
+                                "/auth/login",
                                 "/actuator/health",
                                 "/actuator/info",
                                 "/v3/api-docs/**",
@@ -65,5 +71,26 @@ public class SecurityBeansConfig {
                         ).permitAll()
                         .anyRequest().authenticated());
         return http.build();
+    }
+
+    /**
+     * Disables auto-registration of the prepared {@link JwtAuthenticationFilter}.
+     *
+     * <p>Without this guard, Spring Boot treats any {@code Filter} bean in the
+     * context as a servlet-level filter and runs it for every request. The JWT
+     * filter is intentionally not active until Day 6 wires it into the chain,
+     * so it is registered with {@code enabled = false} and only becomes a
+     * usable dependency.
+     *
+     * @param filter the prepared JWT filter bean
+     * @return a registration that disables servlet-level filtering
+     */
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthenticationFilterRegistration(
+            JwtAuthenticationFilter filter) {
+        FilterRegistrationBean<JwtAuthenticationFilter> registration =
+                new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 }
