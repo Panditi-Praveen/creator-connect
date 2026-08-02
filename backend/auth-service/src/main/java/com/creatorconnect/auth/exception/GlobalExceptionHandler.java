@@ -27,6 +27,8 @@ import java.util.stream.Collectors;
  *   <li>{@link HttpMessageNotReadableException} &rarr; {@code 400 BAD_REQUEST}
  *       for malformed JSON (e.g. an unknown role value).</li>
  *   <li>{@link EmailAlreadyExistsException} &rarr; {@code 409 CONFLICT}.</li>
+ *   <li>{@link UserNotFoundException} &amp; {@link InvalidCredentialsException}
+ *       &rarr; {@code 401 UNAUTHORIZED} (login failures).</li>
  *   <li>Anything else &rarr; {@code 500 INTERNAL_SERVER_ERROR} with a generic
  *       message (the real cause is logged server-side).</li>
  * </ul>
@@ -47,6 +49,35 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleEmailAlreadyExists(EmailAlreadyExistsException ex,
                                                                   HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    /**
+     * Handles login attempts with an unknown email address.
+     *
+     * <p>Returns the same status as {@link #handleInvalidCredentials} so the
+     * response does not reveal whether an email is registered.
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 401 UNAUTHORIZED} with the exception message
+     */
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException ex,
+                                                            HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
+    }
+
+    /**
+     * Handles login attempts with a wrong password or a disabled account.
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 401 UNAUTHORIZED} with the exception message
+     */
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex,
+                                                                  HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
     }
 
     /**
