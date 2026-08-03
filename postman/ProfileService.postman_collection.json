@@ -1,0 +1,154 @@
+{
+  "info": {
+    "name": "CreatorConnect - Profile Service",
+    "description": "Profile Service CRUD APIs.\n\nBase URL: http://localhost:8082 (direct) or http://localhost:8080 (via API Gateway — same paths).\n\nSetup:\n1. Register + login via the Auth Service to obtain a JWT.\n2. Paste the token into the collection variable `jwtToken` (or use the Swagger/Postman Bearer auth tab).\n3. Fill the collection variable `userId` with the userId from the login/register response — it is the UUID that identifies your profile.\n\nEndpoints:\n- POST   /profile           Create profile (userId taken from JWT)\n- GET    /profile/me        Get my profile\n- GET    /profile/{userId}  Get profile by userId\n- PUT    /profile/{userId}  Update profile (owner only)\n- DELETE /profile/{userId}  Delete profile (owner only)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Profile",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"Praveen\",\n  \"lastName\": \"Kumar\",\n  \"headline\": \"Senior Video Editor & Motion Designer\",\n  \"bio\": \"10+ years crafting brand stories, product demos and social content for global clients.\",\n  \"profileImageUrl\": \"https://example.com/avatars/praveen.jpg\",\n  \"location\": \"Bengaluru, India\",\n  \"website\": \"https://praveenportfolio.example\",\n  \"linkedin\": \"https://www.linkedin.com/in/praveen-kumar\",\n  \"github\": \"https://github.com/praveenkumar\",\n  \"skills\": \"Adobe Premiere Pro, After Effects, DaVinci Resolve, Color Grading\",\n  \"experience\": 10,\n  \"availableForHire\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile"]
+        },
+        "description": "Creates a profile for the authenticated user. The owning userId is read from the JWT — never from the body. Returns 409 if the user already has a profile."
+      },
+      "response": []
+    },
+    {
+      "name": "Get My Profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "me"]
+        },
+        "description": "Returns the profile of the authenticated user. Returns 404 when the user has not created a profile yet."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Profile by userId",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{userId}}"]
+        },
+        "description": "Returns any user's profile by their userId (UUID). Any authenticated user may view any profile."
+      },
+      "response": []
+    },
+    {
+      "name": "Update Profile",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"headline\": \"Lead Video Editor & Creative Director\",\n  \"experience\": 12,\n  \"availableForHire\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{userId}}"]
+        },
+        "description": "Partially updates the profile owned by userId. Only the authenticated owner may update it (403 otherwise). Fields omitted from the body are unchanged; send \"\" for an optional field to clear it."
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Profile",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{userId}}"]
+        },
+        "description": "Deletes the profile owned by userId. Only the authenticated owner may delete it (403 otherwise)."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
