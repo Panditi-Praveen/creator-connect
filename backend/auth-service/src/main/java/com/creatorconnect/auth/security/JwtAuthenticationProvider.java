@@ -19,11 +19,10 @@ import java.util.Locale;
  * {@link AuthenticationProvider} that authenticates email + password
  * credentials against the {@code users} table.
  *
- * <p><b>Active:</b> Spring Boot registers every {@code AuthenticationProvider}
- * bean with the global {@code AuthenticationManager} exposed in
- * {@code config.SecurityBeansConfig}. The login endpoint currently performs the
- * same checks directly in the service layer; this provider is ready for
- * chain-based username/password authentication flows.
+ * <p><b>Day 5 scope:</b> prepared but <em>not yet registered</em> with an
+ * {@code AuthenticationManager}. It exists so Day 6 can plug username/password
+ * authentication into the filter chain; the login endpoint currently performs
+ * the same checks directly in the service layer.
  *
  * <p>Follows the classic DAO pattern:
  * <ol>

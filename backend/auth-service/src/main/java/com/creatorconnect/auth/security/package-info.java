@@ -12,13 +12,9 @@
  *       the user table.</li>
  * </ul>
  *
- * <p>The filter and entry point are wired into the {@code SecurityFilterChain}
- * in {@code config.SecurityBeansConfig}: the filter runs before
- * {@code UsernamePasswordAuthenticationFilter} and the entry point answers
- * unauthenticated requests with {@code 401} JSON. The provider is registered
- * with the global {@code AuthenticationManager} exposed by the same config.
- * Public endpoints ({@code /auth/register}, {@code /auth/login}, actuator,
- * Swagger/OpenAPI) are permitted; every other route requires a valid bearer
- * token.
+ * <p>The filter, entry point, and provider are prepared but not yet wired into
+ * the {@code SecurityFilterChain} (which currently lives in
+ * {@code config.SecurityBeansConfig} permitting the public auth endpoints);
+ * they will be enabled when protected endpoints land in Day 6.
  */
 package com.creatorconnect.auth.security;

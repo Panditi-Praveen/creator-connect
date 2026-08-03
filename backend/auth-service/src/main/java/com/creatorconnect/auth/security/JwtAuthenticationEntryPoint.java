@@ -16,8 +16,8 @@ import java.io.IOException;
  * Security entry point that turns unauthenticated access into a clean
  * {@code 401 UNAUTHORIZED} JSON response.
  *
- * <p><b>Active:</b> wired into the {@code SecurityFilterChain} via
- * {@code exceptionHandling()} in {@code config.SecurityBeansConfig}. Spring
+ * <p><b>Day 5 scope:</b> prepared but <em>not yet wired</em> into the
+ * {@code SecurityFilterChain}. Once the JWT filter is enabled (Day 6), Spring
  * Security invokes this class whenever an unauthenticated request reaches a
  * protected route.
  *

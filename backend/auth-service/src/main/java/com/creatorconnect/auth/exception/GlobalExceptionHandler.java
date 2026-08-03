@@ -12,7 +12,6 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -125,27 +124,12 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Handles requests to unknown paths.
-     *
-     * <p>Spring 6.2 moved {@link NoResourceFoundException} out of the
-     * {@link ResponseStatusException} hierarchy, so it needs its own handler
-     * to surface as {@code 404 NOT_FOUND} instead of falling into the generic
-     * {@code 500} handler.
-     *
-     * @param request the originating HTTP request
-     * @return {@code 404 NOT_FOUND}
-     */
-    @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNoResourceFound(HttpServletRequest request) {
-        return build(HttpStatus.NOT_FOUND, "Resource not found", request);
-    }
-
-    /**
      * Preserves the status of framework exceptions that already carry one.
      *
-     * <p>Covers {@code ResponseStatusException}s raised by framework components
-     * (e.g. unsupported HTTP methods). Without this, those would fall into the
-     * generic handler and incorrectly surface as 500.
+     * <p>Covers {@code NoResourceFoundException} (unknown paths &rarr; 404) and
+     * any future {@code ResponseStatusException} (e.g. 401/403 from the JWT
+     * layer in later phases). Without this, those would fall into the generic
+     * handler and incorrectly surface as 500.
      *
      * @param ex      the thrown exception
      * @param request the originating HTTP request

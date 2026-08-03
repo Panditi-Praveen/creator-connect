@@ -20,17 +20,15 @@ import java.util.List;
 /**
  * Servlet filter that authenticates requests carrying a {@code Bearer} JWT.
  *
- * <p><b>Active:</b> this filter is wired into the {@code SecurityFilterChain}
- * in {@code config.SecurityBeansConfig}, positioned before
- * {@link org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter}.
- * A disabled {@code FilterRegistrationBean} prevents Spring Boot from also
- * registering it as a servlet-level filter, so it executes exactly once per
- * request — inside the security chain.
+ * <p><b>Day 5 scope:</b> this class is <em>prepared but intentionally NOT
+ * active</em> yet — the login API and token issuance land first. It is kept
+ * from auto-registering as a servlet filter by the disabled
+ * {@code FilterRegistrationBean} in {@code config.SecurityBeansConfig}, and
+ * will be wired into the {@code SecurityFilterChain} in Day 6 when protected
+ * endpoints arrive.
  *
- * <p>Behaviour:
+ * <p>Behaviour once enabled:
  * <ol>
- *   <li>Skips the public endpoints ({@code /auth/register}, {@code /auth/login},
- *       actuator, Swagger/OpenAPI) so they never pay for a token lookup.</li>
  *   <li>Reads the {@code Authorization: Bearer <token>} header.</li>
  *   <li>Validates the token signature/expiry via {@link JwtService}.</li>
  *   <li>Loads the subject user and, if present and enabled, populates the
@@ -57,16 +55,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
-    }
-
-    @Override
-    protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
-        String uri = request.getRequestURI();
-        return uri.equals("/auth/register")
-                || uri.equals("/auth/login")
-                || uri.startsWith("/actuator/")
-                || uri.startsWith("/swagger-ui")
-                || uri.startsWith("/v3/api-docs");
     }
 
     @Override
