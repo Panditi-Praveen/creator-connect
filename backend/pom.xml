@@ -84,25 +84,6 @@
                     </excludes>
                 </configuration>
             </plugin>
-            <!--
-                maven-compiler-plugin 3.14.x no longer uses the compile classpath
-                as the annotation-processor path, so Lombok must be declared here
-                explicitly or its generated code is silently missing (resulting in
-                "cannot find symbol" errors for builder()/getters).
-            -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
-                        </path>
-                    </annotationProcessorPaths>
-                </configuration>
-            </plugin>
         </plugins>
     </build>
 

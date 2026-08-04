@@ -69,7 +69,16 @@ public class Profile {
 
     /**
      * Owning user (matches the {@code userId} JWT claim from the Auth Service).
+     *
+     * <p>{@code @JdbcTypeCode(SqlTypes.CHAR)} is mandatory here: without it,
+     * Hibernate 6 maps a UUID attribute to {@code BINARY} on MySQL, so
+     * {@code ddl-auto} created the column as {@code binary(36)} and bound the
+     * UUID as 16 raw bytes on insert. Reads ({@code findByUserId}) then could
+     * never match the stored value and every read/update/delete returned 404
+     * even though create succeeded. CHAR(36) keeps the value a readable UUID
+     * string and makes writes and reads symmetric (same as {@link #id}).
      */
+    @JdbcTypeCode(SqlTypes.CHAR)
     @Column(name = "user_id", nullable = false, unique = true, updatable = false, length = 36)
     private UUID userId;
 
