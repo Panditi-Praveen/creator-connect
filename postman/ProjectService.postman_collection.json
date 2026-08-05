@@ -1,0 +1,174 @@
+{
+  "info": {
+    "name": "CreatorConnect - Project Service",
+    "description": "Project Service CRUD APIs.\n\nBase URL: http://localhost:8083 (direct) or http://localhost:8080 (via API Gateway — same paths).\n\nSetup:\n1. Register + login via the Auth Service to obtain a JWT.\n2. Paste the token into the collection variable `jwtToken` (or use the Swagger/Postman Bearer auth tab).\n3. After creating a project, copy its `id` from the response into the collection variable `projectId`.\n\nEndpoints:\n- POST   /projects            Create project (userId taken from JWT)\n- GET    /projects            Get all projects (browse feed, newest first)\n- GET    /projects/my         Get my projects\n- GET    /projects/{id}       Get project by id\n- PUT    /projects/{id}       Update project (owner only)\n- DELETE /projects/{id}       Delete project (owner only)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Project",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"YouTube Intro Package\",\n  \"description\": \"Need a 15-second animated intro for a new YouTube channel. Looking for a motion designer with a strong portfolio.\",\n  \"category\": \"Video Editing\",\n  \"skillsRequired\": [\"After Effects\", \"Motion Design\"],\n  \"budget\": 500.00,\n  \"duration\": \"1 week\",\n  \"experienceLevel\": \"Intermediate\",\n  \"location\": \"Remote\",\n  \"applicationDeadline\": \"2026-09-30\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/projects",
+          "host": ["{{baseUrl}}"],
+          "path": ["projects"]
+        },
+        "description": "Creates a project for the authenticated user. The owning userId is read from the JWT — never from the body. Fields marked required: title, description, category, budget, duration, experienceLevel, applicationDeadline. skillsRequired, location and status are optional (status defaults to OPEN)."
+      },
+      "response": []
+    },
+    {
+      "name": "Get All Projects",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/projects",
+          "host": ["{{baseUrl}}"],
+          "path": ["projects"]
+        },
+        "description": "Returns every project, most recently created first. Any authenticated user may browse the feed."
+      },
+      "response": []
+    },
+    {
+      "name": "Get My Projects",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/projects/my",
+          "host": ["{{baseUrl}}"],
+          "path": ["projects", "my"]
+        },
+        "description": "Returns every project owned by the authenticated user (userId from the JWT), most recently created first."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Project by id",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/projects/{{projectId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["projects", "{{projectId}}"]
+        },
+        "description": "Returns a single project by its id (UUID). Any authenticated user may view any project. Returns 404 when the project does not exist."
+      },
+      "response": []
+    },
+    {
+      "name": "Update Project",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"YouTube Intro Package — V2\",\n  \"budget\": 750.00,\n  \"status\": \"IN_PROGRESS\",\n  \"skillsRequired\": [\"After Effects\", \"Motion Design\", \"Sound Design\"]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/projects/{{projectId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["projects", "{{projectId}}"]
+        },
+        "description": "Partially updates the project with the given id. Only the authenticated owner may update it (403 otherwise). Fields omitted from the body are unchanged. Status values: OPEN, IN_PROGRESS, COMPLETED, CANCELLED."
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Project",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/projects/{{projectId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["projects", "{{projectId}}"]
+        },
+        "description": "Deletes the project with the given id. Only the authenticated owner may delete it (403 otherwise). Returns 200 with a null data payload on success."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8083",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
