@@ -18,6 +18,7 @@
         <module>api-gateway</module>
         <module>auth-service</module>
         <module>profile-service</module>
+        <module>project-service</module>
     </modules>
 
     <!-- Spring Boot Parent -->
