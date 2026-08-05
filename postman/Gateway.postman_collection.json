@@ -1,0 +1,317 @@
+{
+  "info": {
+    "name": "CreatorConnect - API Gateway (Full Flow)",
+    "description": "Complete CreatorConnect flow through the API Gateway.\n\nBase URL: http://localhost:8080 (API Gateway — single entry point). All paths below are the SAME as the service paths; the gateway routes them to the right service via Eureka.\n\nSetup:\n1. Run \"Register User\" then \"Login\" to obtain a JWT.\n2. Postman script on Login auto-saves {{jwtToken}} and {{userId}} (userId is TOP-LEVEL in data, NOT nested under user).\n3. Run Create Profile → Get My Profile → Update Profile → Delete Profile.\n4. Security requests are pre-built: missing/invalid/expired token (401) and ownership (403).\n\nExpected status codes are listed in each request description.\n\nAlso useful:\n- GET /actuator/gateway/routes — lists the 5 configured gateway routes (auth, profile, project, hiring, ai).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Register User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"Praveen\",\n  \"lastName\": \"Kumar\",\n  \"email\": \"praveen.gw@creatorconnect.test\",\n  \"password\": \"Passw0rd!X1\",\n  \"phone\": \"+91-9876543210\",\n  \"role\": \"CREATOR\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "register"]
+        },
+        "description": "Registers a new user.\n\nHeaders: Content-Type: application/json\nBody: firstName, lastName, email, password (8-64 chars, upper+lower+digit+special), phone (optional), role (CREATOR|FREELANCER)\n\nExpected: 201 CREATED\n{\n  \"status\": 201,\n  \"message\": \"User registered successfully\",\n  \"data\": { \"id\": \"<uuid>\", \"firstName\": \"...\", \"email\": \"...\", \"role\": \"CREATOR\", ... }\n}\n\nErrors: 400 invalid payload · 409 email already exists."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"praveen.gw@creatorconnect.test\",\n  \"password\": \"Passw0rd!X1\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        },
+        "description": "Authenticates and returns a JWT access token.\n\nHeaders: Content-Type: application/json\nBody: email, password\n\nExpected: 200 OK\n{\n  \"status\": 200,\n  \"data\": {\n    \"accessToken\": \"<jwt>\",\n    \"tokenType\": \"Bearer\",\n    \"expiresIn\": 86400,\n    \"userId\": \"<uuid>\",\n    \"email\": \"...\",\n    \"role\": \"CREATOR\"\n  }\n}\n\nErrors: 401 invalid credentials · 400 malformed payload.\n\nTest script (auto-saves variables — userId is top-level in data, NOT nested under user):\nif (pm.response.code === 200) {\n  const data = pm.response.json().data;\n  pm.collectionVariables.set(\"jwtToken\", data.accessToken);\n  pm.collectionVariables.set(\"userId\", data.userId);\n}"
+      },
+      "response": []
+    },
+    {
+      "name": "3. Create Profile",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"Praveen\",\n  \"lastName\": \"Kumar\",\n  \"headline\": \"Senior Video Editor & Motion Designer\",\n  \"bio\": \"10+ years crafting brand stories, product demos and social content for global clients.\",\n  \"profileImageUrl\": \"https://example.com/avatars/praveen.jpg\",\n  \"location\": \"Bengaluru, India\",\n  \"website\": \"https://praveenportfolio.example\",\n  \"linkedin\": \"https://www.linkedin.com/in/praveen-kumar\",\n  \"github\": \"https://github.com/praveenkumar\",\n  \"skills\": \"Adobe Premiere Pro, After Effects, DaVinci Resolve, Color Grading\",\n  \"experience\": 10,\n  \"availableForHire\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile"]
+        },
+        "description": "Creates the authenticated user's profile. The owning userId is read from the JWT — never from the body.\n\nHeaders: Authorization: Bearer {{jwtToken}} · Content-Type: application/json\nBody: firstName*, lastName*, headline, bio, profileImageUrl, location, website, linkedin, github, skills, experience (0-100), availableForHire (default true)\n\nExpected: 201 CREATED\n{\n  \"status\": 201,\n  \"message\": \"Profile created successfully\",\n  \"data\": { \"id\": \"<profileUuid>\", \"userId\": \"<uuid>\", \"firstName\": \"...\", ... }\n}\n\nErrors: 400 invalid payload · 401 missing/invalid JWT · 409 profile already exists."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Get My Profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "me"]
+        },
+        "description": "Returns the authenticated user's own profile.\n\nHeaders: Authorization: Bearer {{jwtToken}}\n\nExpected: 200 OK with the profile in data.\n\nErrors: 401 missing/invalid JWT · 404 no profile yet."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Get Profile by userId",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{userId}}"]
+        },
+        "description": "Returns any user's profile by userId (UUID). Any authenticated user may view any profile.\n\nExpected: 200 OK.\n\nErrors: 400 invalid UUID · 401 · 404 not found."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Update Profile",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"headline\": \"Lead Video Editor & Creative Director\",\n  \"experience\": 12,\n  \"availableForHire\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{userId}}"]
+        },
+        "description": "Partially updates the profile owned by userId (PUT-as-PATCH: omitted fields unchanged).\n\nHeaders: Authorization: Bearer {{jwtToken}} · Content-Type: application/json\nBody: any subset of { firstName, lastName, headline, bio, profileImageUrl, location, website, linkedin, github, skills, experience, availableForHire }\n\nExpected: 200 OK with the updated profile.\n\nErrors: 400 · 401 · 403 not the owner · 404 profile not found."
+      },
+      "response": []
+    },
+    {
+      "name": "7. Delete Profile",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{userId}}"]
+        },
+        "description": "Deletes the profile owned by userId.\n\nHeaders: Authorization: Bearer {{jwtToken}}\n\nExpected: 200 OK with empty data.\n\nErrors: 400 · 401 · 403 not the owner · 404 profile not found."
+      },
+      "response": []
+    },
+    {
+      "name": "Security - Missing Token (expect 401)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/profile/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "me"]
+        },
+        "description": "No Authorization header.\n\nExpected: 401 Unauthorized."
+      },
+      "response": []
+    },
+    {
+      "name": "Security - Invalid Token (expect 401)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer not.a.jwt",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "me"]
+        },
+        "description": "Malformed/garbage token.\n\nExpected: 401 Unauthorized."
+      },
+      "response": []
+    },
+    {
+      "name": "Security - Expired Token (expect 401)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJleHBpcmVkQGNyZWF0b3Jjb25uZWN0LnRlc3QiLCJ1c2VySWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJyb2xlIjoiQ1JFQVRPUiIsImlzcyI6ImNyZWF0b3Jjb25uZWN0LWF1dGgtc2VydmljZSIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDAwMDAxfQ.vpuQauGcRJgGA95V8DRBWXilIGzXMNzgxQELice2ziE",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "me"]
+        },
+        "description": "A genuinely expired token: exp = 1700000001 (Nov 2023) with a valid HMAC-SHA256 signature computed with the shared dev secret and the correct issuer.\n\nExpected: 401 Unauthorized (JwtService rejects expired tokens, even though the signature is valid)."
+      },
+      "response": []
+    },
+    {
+      "name": "Security - Ownership (expect 403)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{otherJwtToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"headline\": \"hacked\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{userId}}"]
+        },
+        "description": "A SECOND user (token in {{otherJwtToken}}) tries to update the profile of {{userId}}.\n\nSetup: register+login a second account and set {{otherJwtToken}} to its accessToken.\n\nExpected: 403 Forbidden — ownership validation rejects non-owners."
+      },
+      "response": []
+    },
+    {
+      "name": "Gateway - Routes (actuator)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/actuator/gateway/routes",
+          "host": ["{{baseUrl}}"],
+          "path": ["actuator", "gateway", "routes"]
+        },
+        "description": "Lists the routes configured on the gateway (spring.cloud.gateway.server.webmvc.routes).\n\nExpected: 200 OK\n{\n  \"routes\": [\n    { \"id\": \"auth-service\", \"uri\": \"lb://auth-service\", \"predicates\": [{\"name\": \"Path\", \"args\": {...}}] },\n    ...\n  ]\n}\n\nAlso available: GET /actuator/health and GET /actuator/info."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "otherJwtToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

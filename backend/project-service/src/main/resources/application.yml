@@ -1,0 +1,87 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: project-service
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/creatorconnect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: root
+    password: ${MYSQL_PASSWORD:Praveen@0417}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    show-sql: false
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+    registry-fetch-interval-seconds: 5
+  instance:
+    hostname: localhost
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 10
+
+# JWT settings — MUST mirror the Auth Service: tokens are issued by
+# auth-service, so this service shares the exact same HMAC signing secret
+# and validates the issuer claim ("creatorconnect-auth-service") on every
+# protected request.
+app:
+  jwt:
+    secret: Y3JlYXRvcmNvbm5lY3Qtc3VwZXItc2VjcmV0LWtleS1jaGFuZ2UtbWUtYmVmb3JlLXByb2R1Y3Rpb24tMjAyNg==
+    expiration-ms: 86400000
+    issuer: creatorconnect-auth-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,env,metrics
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+  info:
+    env:
+      enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+info:
+  app:
+    name: CreatorConnect Project Service
+    description: Project management — post, browse, update and delete creative projects
+    version: 1.0.0
+    java-version: ${java.version}
+    spring-boot-version: 3.5.16
+    spring-cloud-version: 2025.0.3
+
+logging:
+  level:
+    com.creatorconnect.project: DEBUG
+    com.netflix.discovery: INFO
+    com.netflix.eureka: INFO
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
