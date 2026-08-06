@@ -1,5 +1,6 @@
 package com.creatorconnect.project.controller;
 
+import com.creatorconnect.project.dto.request.ProjectFilter;
 import com.creatorconnect.project.dto.request.ProjectRequest;
 import com.creatorconnect.project.dto.request.UpdateProjectRequest;
 import com.creatorconnect.project.dto.response.ApiResponse;
@@ -17,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -98,25 +100,39 @@ public class ProjectController {
     }
 
     /**
-     * Returns every project, most recently created first (the browse feed).
+     * Returns the project feed, most recently created first, optionally
+     * filtered by the query parameters bound into {@link ProjectFilter}.
      *
-     * @param httpRequest the raw request (used to echo the request path)
-     * @return {@code 200 OK} with the project list
+     * <p>Every filter is optional and combinable: {@code category},
+     * {@code skill}, {@code budgetMin}/{@code budgetMax},
+     * {@code experienceLevel}, {@code location} and {@code keyword}. Malformed
+     * or invalid filter values yield {@code 400 BAD_REQUEST}.
+     *
+     * @param filter       the optional feed filters (query parameters)
+     * @param httpRequest  the raw request (used to echo the request path)
+     * @return {@code 200 OK} with the filtered project list
      */
     @GetMapping
     @Operation(
             summary = "Get all projects",
             description = "Returns every project, most recently created first. Any authenticated "
-                    + "user may browse the feed."
+                    + "user may browse the feed. Optional query-parameter filters "
+                    + "(category, skill, budgetMin, budgetMax, experienceLevel, location, "
+                    + "keyword) narrow the results; all filters are ANDed together."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200", description = "Projects retrieved"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "Invalid filter value"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "401", description = "Missing or invalid JWT")
     })
-    public ResponseEntity<ApiResponse<List<ProjectResponse>>> getAll(HttpServletRequest httpRequest) {
-        List<ProjectResponse> projects = projectService.getAllProjects();
+    public ResponseEntity<ApiResponse<List<ProjectResponse>>> getAll(
+            @Valid @ModelAttribute ProjectFilter filter,
+            HttpServletRequest httpRequest) {
+
+        List<ProjectResponse> projects = projectService.getAllProjects(filter);
         return ResponseEntity.ok(ApiResponse.success(
                 HttpStatus.OK.value(),
                 "Projects retrieved successfully",
@@ -126,30 +142,37 @@ public class ProjectController {
     }
 
     /**
-     * Returns the authenticated user's own projects.
+     * Returns the authenticated user's own projects, most recently created
+     * first, optionally filtered like the browse feed.
      *
+     * @param filter       the optional feed filters (query parameters)
      * @param authentication the current security context
-     * @param httpRequest    the raw request (used to echo the request path)
-     * @return {@code 200 OK} with the caller's projects
+     * @param httpRequest  the raw request (used to echo the request path)
+     * @return {@code 200 OK} with the caller's filtered projects
      */
     @GetMapping("/my")
     @Operation(
             summary = "Get my projects",
             description = "Returns every project owned by the authenticated user (userId from the JWT), "
-                    + "most recently created first."
+                    + "most recently created first. Accepts the same optional query-parameter "
+                    + "filters as the browse feed (category, skill, budgetMin, budgetMax, "
+                    + "experienceLevel, location, keyword)."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200", description = "Projects retrieved"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "Invalid filter value"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "401", description = "Missing or invalid JWT")
     })
     public ResponseEntity<ApiResponse<List<ProjectResponse>>> getMyProjects(
+            @Valid @ModelAttribute ProjectFilter filter,
             Authentication authentication,
             HttpServletRequest httpRequest) {
 
         ProjectPrincipal principal = (ProjectPrincipal) authentication.getPrincipal();
-        List<ProjectResponse> projects = projectService.getProjectsByUserId(principal.userId());
+        List<ProjectResponse> projects = projectService.getProjectsByUserId(principal.userId(), filter);
         return ResponseEntity.ok(ApiResponse.success(
                 HttpStatus.OK.value(),
                 "Projects retrieved successfully",

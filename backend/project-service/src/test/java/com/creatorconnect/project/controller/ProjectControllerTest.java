@@ -1,6 +1,7 @@
 package com.creatorconnect.project.controller;
 
 import com.creatorconnect.project.config.SecurityBeansConfig;
+import com.creatorconnect.project.dto.request.ProjectFilter;
 import com.creatorconnect.project.dto.response.ProjectResponse;
 import com.creatorconnect.project.entity.ProjectStatus;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
@@ -28,6 +29,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import org.mockito.ArgumentCaptor;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -115,7 +118,7 @@ class ProjectControllerTest {
 
     @Test
     void getAllProjects_returnsList() throws Exception {
-        when(projectService.getAllProjects()).thenReturn(List.of(projectResponse()));
+        when(projectService.getAllProjects(any())).thenReturn(List.of(projectResponse()));
 
         mockMvc.perform(get("/projects").header("Authorization", "Bearer valid-token"))
                 .andExpect(status().isOk())
@@ -124,14 +127,69 @@ class ProjectControllerTest {
     }
 
     @Test
+    void getAllProjects_withFilters_passesFilterToService() throws Exception {
+        mockMvc.perform(get("/projects")
+                        .param("category", "Video Editing")
+                        .param("skill", "After Effects")
+                        .param("budgetMin", "100")
+                        .param("budgetMax", "1000")
+                        .param("keyword", "youtube")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ProjectFilter> captor = ArgumentCaptor.forClass(ProjectFilter.class);
+        verify(projectService).getAllProjects(captor.capture());
+        ProjectFilter filter = captor.getValue();
+        assertThat(filter.getCategory()).isEqualTo("Video Editing");
+        assertThat(filter.getSkill()).isEqualTo("After Effects");
+        assertThat(filter.getBudgetMin()).isEqualByComparingTo(new BigDecimal("100"));
+        assertThat(filter.getBudgetMax()).isEqualByComparingTo(new BigDecimal("1000"));
+        assertThat(filter.getKeyword()).isEqualTo("youtube");
+        assertThat(filter.getExperienceLevel()).isNull();
+        assertThat(filter.getLocation()).isNull();
+    }
+
+    @Test
+    void getAllProjects_withInvalidBudgetFilter_returns400() throws Exception {
+        mockMvc.perform(get("/projects")
+                        .param("budgetMin", "not-a-number")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void getAllProjects_withNegativeBudgetFilter_returns400() throws Exception {
+        mockMvc.perform(get("/projects")
+                        .param("budgetMin", "-50")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
     void getMyProjects_usesPrincipalUserId() throws Exception {
-        when(projectService.getProjectsByUserId(OWNER_ID)).thenReturn(List.of(projectResponse()));
+        when(projectService.getProjectsByUserId(eq(OWNER_ID), any())).thenReturn(List.of(projectResponse()));
 
         mockMvc.perform(get("/projects/my").header("Authorization", "Bearer valid-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].userId").value(OWNER_ID.toString()));
 
-        verify(projectService).getProjectsByUserId(OWNER_ID);
+        verify(projectService).getProjectsByUserId(eq(OWNER_ID), any());
+    }
+
+    @Test
+    void getMyProjects_withFilters_passesFilterToService() throws Exception {
+        mockMvc.perform(get("/projects/my")
+                        .param("experienceLevel", "Intermediate")
+                        .param("location", "Remote")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ProjectFilter> captor = ArgumentCaptor.forClass(ProjectFilter.class);
+        verify(projectService).getProjectsByUserId(eq(OWNER_ID), captor.capture());
+        assertThat(captor.getValue().getExperienceLevel()).isEqualTo("Intermediate");
+        assertThat(captor.getValue().getLocation()).isEqualTo("Remote");
     }
 
     @Test

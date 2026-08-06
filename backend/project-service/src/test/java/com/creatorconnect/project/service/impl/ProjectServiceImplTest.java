@@ -1,5 +1,6 @@
 package com.creatorconnect.project.service.impl;
 
+import com.creatorconnect.project.dto.request.ProjectFilter;
 import com.creatorconnect.project.dto.request.ProjectRequest;
 import com.creatorconnect.project.dto.request.UpdateProjectRequest;
 import com.creatorconnect.project.dto.response.ProjectResponse;
@@ -24,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,13 +68,66 @@ class ProjectServiceImplTest {
     @Test
     void getAllProjects_returnsMappedList() {
         Project entity = project(OWNER_ID);
-        when(projectRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(entity));
+        when(projectRepository.findAllByFilters(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(entity));
         when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
 
-        List<ProjectResponse> responses = projectService.getAllProjects();
+        List<ProjectResponse> responses = projectService.getAllProjects(ProjectFilter.builder().build());
 
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).getId()).isEqualTo(PROJECT_ID);
+    }
+
+    @Test
+    void getAllProjects_forwardsFilterToRepository() {
+        ProjectFilter filter = ProjectFilter.builder()
+                .category("Video Editing")
+                .skill("After Effects")
+                .budgetMin(new BigDecimal("100"))
+                .keyword("youtube")
+                .build();
+        when(projectRepository.findAllByFilters(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of());
+
+        projectService.getAllProjects(filter);
+
+        verify(projectRepository).findAllByFilters(
+                "Video Editing", "After Effects", new BigDecimal("100"), null, null, null, "youtube");
+    }
+
+    @Test
+    void getAllProjects_withBlankFilterValues_forwardsNulls() {
+        ProjectFilter filter = ProjectFilter.builder()
+                .category("")
+                .skill("   ")
+                .location("")
+                .keyword("\t")
+                .build();
+        when(projectRepository.findAllByFilters(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of());
+
+        projectService.getAllProjects(filter);
+
+        // Empty / whitespace-only query parameters mean "no filter" — they
+        // must be forwarded as null, never as an active filter matching
+        // nothing.
+        verify(projectRepository).findAllByFilters(
+                null, null, null, null, null, null, null);
+    }
+
+    @Test
+    void getAllProjects_withWhitespacePaddedValues_trimsThem() {
+        ProjectFilter filter = ProjectFilter.builder()
+                .category("  Video Editing  ")
+                .experienceLevel(" Intermediate ")
+                .build();
+        when(projectRepository.findAllByFilters(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of());
+
+        projectService.getAllProjects(filter);
+
+        verify(projectRepository).findAllByFilters(
+                "Video Editing", null, null, null, "Intermediate", null, null);
     }
 
     @Test
@@ -97,13 +152,30 @@ class ProjectServiceImplTest {
     @Test
     void getProjectsByUserId_returnsOwnedProjects() {
         Project entity = project(OWNER_ID);
-        when(projectRepository.findByUserIdOrderByCreatedAtDesc(OWNER_ID)).thenReturn(List.of(entity));
+        when(projectRepository.findByUserIdAndFilters(eq(OWNER_ID), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(entity));
         when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
 
-        List<ProjectResponse> responses = projectService.getProjectsByUserId(OWNER_ID);
+        List<ProjectResponse> responses =
+                projectService.getProjectsByUserId(OWNER_ID, ProjectFilter.builder().build());
 
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).getUserId()).isEqualTo(OWNER_ID);
+    }
+
+    @Test
+    void getProjectsByUserId_forwardsFilterToRepository() {
+        ProjectFilter filter = ProjectFilter.builder()
+                .category("Graphic Design")
+                .budgetMax(new BigDecimal("500"))
+                .build();
+        when(projectRepository.findByUserIdAndFilters(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of());
+
+        projectService.getProjectsByUserId(OWNER_ID, filter);
+
+        verify(projectRepository).findByUserIdAndFilters(
+                OWNER_ID, "Graphic Design", null, null, new BigDecimal("500"), null, null, null);
     }
 
     @Test

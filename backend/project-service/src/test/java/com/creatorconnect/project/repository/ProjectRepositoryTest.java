@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>{@link JpaAuditingConfig} is imported so {@code createdAt} /
  * {@code updatedAt} are populated exactly like in production. These tests
- * verify the two derived queries plus the JSON round-trip of
+ * verify the two filtered listing queries, the JSON round-trip of
  * {@code skillsRequired} and the CHAR(36) UUID mapping.
  */
 @DataJpaTest
@@ -53,11 +53,12 @@ class ProjectRepositoryTest {
     }
 
     @Test
-    void findByUserIdOrderByCreatedAtDesc_returnsOnlyThatUsersProjects() {
+    void findByUserIdAndFilters_returnsOnlyThatUsersProjects() {
         Project mine = projectRepository.save(project("My project", USER_A));
         projectRepository.save(project("Someone else's project", USER_B));
 
-        List<Project> result = projectRepository.findByUserIdOrderByCreatedAtDesc(USER_A);
+        List<Project> result = projectRepository.findByUserIdAndFilters(
+                USER_A, null, null, null, null, null, null, null);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getId()).isEqualTo(mine.getId());
@@ -65,11 +66,12 @@ class ProjectRepositoryTest {
     }
 
     @Test
-    void findAllByOrderByCreatedAtDesc_ordersNewestFirst() {
+    void findAllByFilters_ordersNewestFirst() {
         Project older = projectRepository.save(project("Older project", USER_A));
         Project newer = projectRepository.save(project("Newer project", USER_B));
 
-        List<Project> result = projectRepository.findAllByOrderByCreatedAtDesc();
+        List<Project> result = projectRepository.findAllByFilters(
+                null, null, null, null, null, null, null);
 
         // Both projects are returned. `createdAt` is written from
         // LocalDateTime.now(), whose resolution may be coarser than the gap
@@ -92,6 +94,100 @@ class ProjectRepositoryTest {
     }
 
     @Test
+    void findAllByFilters_withNoFilters_returnsAllProjects() {
+        projectRepository.save(project("Project A", USER_A));
+        projectRepository.save(project("Project B", USER_B));
+
+        List<Project> result = projectRepository.findAllByFilters(
+                null, null, null, null, null, null, null);
+
+        assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void findAllByFilters_withCategoryFilter_returnsOnlyMatching() {
+        projectRepository.save(project(
+                "Video project", "A video edit.",
+                "Video Editing", List.of("Premiere Pro"), new BigDecimal("400.00"), USER_A));
+        Project graphic = projectRepository.save(project(
+                "Graphic project", "A brand identity.",
+                "Graphic Design", List.of("Illustrator"), new BigDecimal("300.00"), USER_A));
+
+        List<Project> result = projectRepository.findAllByFilters(
+                "graphic design", null, null, null, null, null, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(graphic.getId());
+    }
+
+    @Test
+    void findAllByFilters_withSkillFilter_returnsOnlyMatching() {
+        Project matching = projectRepository.save(project(
+                "Motion project", "A motion reel.",
+                "Video Editing", List.of("After Effects", "3D Animation"), new BigDecimal("800.00"), USER_A));
+        projectRepository.save(project(
+                "Writing project", "A script.",
+                "Copywriting", List.of("Storytelling"), new BigDecimal("200.00"), USER_B));
+
+        List<Project> result = projectRepository.findAllByFilters(
+                null, "after effects", null, null, null, null, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(matching.getId());
+    }
+
+    @Test
+    void findAllByFilters_withBudgetRange_returnsOnlyMatching() {
+        projectRepository.save(project(
+                "Cheap project", "Low budget.",
+                "Video Editing", List.of("Editing"), new BigDecimal("100.00"), USER_A));
+        Project mid = projectRepository.save(project(
+                "Mid project", "Mid budget.",
+                "Video Editing", List.of("Editing"), new BigDecimal("500.00"), USER_A));
+        projectRepository.save(project(
+                "Pricy project", "High budget.",
+                "Video Editing", List.of("Editing"), new BigDecimal("2000.00"), USER_B));
+
+        List<Project> result = projectRepository.findAllByFilters(
+                null, null, new BigDecimal("400.00"), new BigDecimal("1500.00"), null, null, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(mid.getId());
+    }
+
+    @Test
+    void findAllByFilters_withKeyword_returnsOnlyMatching() {
+        Project titled = projectRepository.save(project(
+                "YouTube channel intro", "An animated opener.",
+                "Video Editing", List.of("After Effects"), new BigDecimal("500.00"), USER_A));
+        projectRepository.save(project(
+                "Podcast cover", "An eye-catching cover.",
+                "Graphic Design", List.of("Photoshop"), new BigDecimal("250.00"), USER_B));
+
+        List<Project> result = projectRepository.findAllByFilters(
+                null, null, null, null, null, null, "youtube");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(titled.getId());
+    }
+
+    @Test
+    void findAllByFilters_withCombinedFilters_returnsOnlyMatching() {
+        projectRepository.save(project(
+                "Vlog edit", "A vlog.",
+                "Video Editing", List.of("Premiere Pro"), new BigDecimal("300.00"), USER_A));
+        Project matching = projectRepository.save(project(
+                "After Effects intro", "A motion intro.",
+                "Video Editing", List.of("After Effects"), new BigDecimal("600.00"), USER_A));
+
+        List<Project> result = projectRepository.findAllByFilters(
+                "video editing", "after effects", new BigDecimal("400.00"), null, null, null, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(matching.getId());
+    }
+
+    @Test
     void delete_removesProject() {
         Project saved = projectRepository.save(project("To be deleted", USER_A));
 
@@ -106,13 +202,19 @@ class ProjectRepositoryTest {
     }
 
     private Project project(String title, UUID userId) {
+        return project(title, "A short description of the project.", "Video Editing",
+                List.of("After Effects", "Motion Design"), new BigDecimal("500.00"), userId);
+    }
+
+    private Project project(String title, String description, String category,
+                            List<String> skills, BigDecimal budget, UUID userId) {
         return Project.builder()
                 .userId(userId)
                 .title(title)
-                .description("A short description of the project.")
-                .category("Video Editing")
-                .skillsRequired(List.of("After Effects", "Motion Design"))
-                .budget(new BigDecimal("500.00"))
+                .description(description)
+                .category(category)
+                .skillsRequired(skills)
+                .budget(budget)
                 .duration("1 week")
                 .experienceLevel("Intermediate")
                 .location("Remote")

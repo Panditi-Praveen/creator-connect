@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "CreatorConnect - Project Service",
-    "description": "Project Service CRUD APIs.\n\nBase URL: http://localhost:8083 (direct) or http://localhost:8080 (via API Gateway — same paths).\n\nSetup:\n1. Register + login via the Auth Service to obtain a JWT.\n2. Paste the token into the collection variable `jwtToken` (or use the Swagger/Postman Bearer auth tab).\n3. After creating a project, copy its `id` from the response into the collection variable `projectId`.\n\nEndpoints:\n- POST   /projects            Create project (userId taken from JWT)\n- GET    /projects            Get all projects (browse feed, newest first)\n- GET    /projects/my         Get my projects\n- GET    /projects/{id}       Get project by id\n- PUT    /projects/{id}       Update project (owner only)\n- DELETE /projects/{id}       Delete project (owner only)",
+    "description": "Project Service CRUD APIs.\n\nBase URL: http://localhost:8083 (direct) or http://localhost:8080 (via API Gateway — same paths).\n\nSetup:\n1. Register + login via the Auth Service to obtain a JWT.\n2. Paste the token into the collection variable `jwtToken` (or use the Swagger/Postman Bearer auth tab).\n3. After creating a project, copy its `id` from the response into the collection variable `projectId`.\n\nEndpoints:\n- POST   /projects            Create project (userId taken from JWT)\n- GET    /projects            Get all projects (browse feed — optional filters: category, skill, budgetMin/budgetMax, experienceLevel, location, keyword)\n- GET    /projects/my         Get my projects (same optional filters)\n- GET    /projects/{id}       Get project by id\n- PUT    /projects/{id}       Update project (owner only)\n- DELETE /projects/{id}       Delete project (owner only)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -51,11 +51,48 @@
           }
         ],
         "url": {
-          "raw": "{{baseUrl}}/projects",
+          "raw": "{{baseUrl}}/projects?category=Video%20Editing&skill=After%20Effects&budgetMin=100&budgetMax=1000&experienceLevel=Intermediate&location=Remote&keyword=youtube",
           "host": ["{{baseUrl}}"],
-          "path": ["projects"]
+          "path": ["projects"],
+          "query": [
+            {
+              "key": "category",
+              "value": "Video Editing",
+              "description": "Exact category match (case-insensitive). Optional."
+            },
+            {
+              "key": "skill",
+              "value": "After Effects",
+              "description": "A skill the project must require — substring match (case-insensitive). Optional."
+            },
+            {
+              "key": "budgetMin",
+              "value": "100",
+              "description": "Inclusive lower budget bound. Optional."
+            },
+            {
+              "key": "budgetMax",
+              "value": "1000",
+              "description": "Inclusive upper budget bound. Optional."
+            },
+            {
+              "key": "experienceLevel",
+              "value": "Intermediate",
+              "description": "Exact experience level match (case-insensitive). Optional."
+            },
+            {
+              "key": "location",
+              "value": "Remote",
+              "description": "Exact location match (case-insensitive). Optional."
+            },
+            {
+              "key": "keyword",
+              "value": "youtube",
+              "description": "Substring match on title or description (case-insensitive). Optional."
+            }
+          ]
         },
-        "description": "Returns every project, most recently created first. Any authenticated user may browse the feed."
+        "description": "Returns the project feed, most recently created first. Any authenticated user may browse. Every query parameter is optional and combinable — active filters are ANDed together and evaluated in the database. Delete any parameter you don't want to filter by."
       },
       "response": []
     },
@@ -71,11 +108,23 @@
           }
         ],
         "url": {
-          "raw": "{{baseUrl}}/projects/my",
+          "raw": "{{baseUrl}}/projects/my?budgetMin=100&budgetMax=2000",
           "host": ["{{baseUrl}}"],
-          "path": ["projects", "my"]
+          "path": ["projects", "my"],
+          "query": [
+            {
+              "key": "budgetMin",
+              "value": "100",
+              "description": "Inclusive lower budget bound. Optional."
+            },
+            {
+              "key": "budgetMax",
+              "value": "2000",
+              "description": "Inclusive upper budget bound. Optional."
+            }
+          ]
         },
-        "description": "Returns every project owned by the authenticated user (userId from the JWT), most recently created first."
+        "description": "Returns every project owned by the authenticated user (userId from the JWT), most recently created first. Accepts the same optional filters as the browse feed (category, skill, budgetMin/budgetMax, experienceLevel, location, keyword)."
       },
       "response": []
     },

@@ -1,5 +1,6 @@
 package com.creatorconnect.project.service;
 
+import com.creatorconnect.project.dto.request.ProjectFilter;
 import com.creatorconnect.project.dto.request.ProjectRequest;
 import com.creatorconnect.project.dto.request.UpdateProjectRequest;
 import com.creatorconnect.project.dto.response.ProjectResponse;
@@ -30,11 +31,14 @@ public interface ProjectService {
     ProjectResponse createProject(UUID userId, ProjectRequest request);
 
     /**
-     * Returns every project, most recently created first.
+     * Returns the browse feed, most recently created first, filtered by the
+     * given optional criteria.
      *
-     * @return the browse feed
+     * @param filter the optional feed filters (every field {@code null}
+     *               returns the unfiltered feed)
+     * @return the filtered browse feed
      */
-    List<ProjectResponse> getAllProjects();
+    List<ProjectResponse> getAllProjects(ProjectFilter filter);
 
     /**
      * Loads a single project by id (any authenticated caller may view any
@@ -49,12 +53,14 @@ public interface ProjectService {
 
     /**
      * Returns all projects owned by the given user, most recently created
-     * first.
+     * first, filtered by the same optional criteria as the browse feed.
      *
      * @param userId the owning user's id (from the JWT)
-     * @return the user's project projections
+     * @param filter the optional feed filters (every field {@code null}
+     *               returns all of the user's projects)
+     * @return the user's filtered project projections
      */
-    List<ProjectResponse> getProjectsByUserId(UUID userId);
+    List<ProjectResponse> getProjectsByUserId(UUID userId, ProjectFilter filter);
 
     /**
      * Updates the project with the given id.
