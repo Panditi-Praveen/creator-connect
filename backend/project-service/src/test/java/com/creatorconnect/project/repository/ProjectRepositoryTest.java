@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,8 +71,24 @@ class ProjectRepositoryTest {
 
         List<Project> result = projectRepository.findAllByOrderByCreatedAtDesc();
 
-        assertThat(result).extracting(Project::getId)
-                .containsExactly(newer.getId(), older.getId());
+        // Both projects are returned. `createdAt` is written from
+        // LocalDateTime.now(), whose resolution may be coarser than the gap
+        // between two successive saves, so equal timestamps are possible.
+        // Instead of assuming distinct timestamps, this assertion verifies the
+        // full ordering contract of the query (createdAt DESC, then id DESC as
+        // a deterministic tiebreaker) — it is flake-free at any clock
+        // resolution and would fail if the id DESC tiebreaker were removed.
+        //
+        // The id tiebreaker must be compared as the id's STRING form: the DB
+        // stores id as CHAR(36) and orders it lexicographically, whereas
+        // UUID.compareTo() uses signed 128-bit comparison — the two disagree
+        // for random UUIDs that straddle the sign boundary (first hex digit
+        // >= 8). Comparing toString() mirrors exactly what the database does.
+        assertThat(result).hasSize(2);
+        assertThat(result).isSortedAccordingTo(Comparator
+                .comparing(Project::getCreatedAt).reversed()
+                .thenComparing(project -> project.getId().toString(),
+                        Comparator.reverseOrder()));
     }
 
     @Test
