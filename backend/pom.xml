@@ -19,6 +19,7 @@
         <module>auth-service</module>
         <module>profile-service</module>
         <module>project-service</module>
+        <module>hiring-service</module>
     </modules>
 
     <!-- Spring Boot Parent -->
