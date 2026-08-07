@@ -1,0 +1,221 @@
+{
+  "info": {
+    "name": "CreatorConnect - Hiring Service",
+    "description": "Hiring Service APIs — freelancers apply to projects, creators manage and decide on applications.\n\nBase URL: http://localhost:8084 (direct).\n\nSetup:\n1. Register + login via the Auth Service to obtain JWTs for a FREELANCER and a CREATOR.\n2. Paste the freelancer's token into the collection variable `freelancerToken` and the creator's token into `creatorToken`.\n3. After creating a project (Project Service), copy its `id` into the collection variable `projectId`.\n4. After applying, copy the application `id` from the response into the collection variable `applicationId`.\n\nEndpoints:\n- POST   /applications                     Apply to project (freelancer only — 409 if already applied)\n- GET    /applications/my                  Get my applications (paginated: page, size)\n- GET    /applications/project/{projectId} Get applications for project (creator only)\n- PUT    /applications/{id}/status         Accept/reject application (creator only)\n- DELETE /applications/{id}                Withdraw application (own application only)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Apply to Project",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{freelancerToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"proposal\": \"I'm a motion designer with 6 years of experience. I can deliver a polished 15-second animated intro with sound design.\",\n  \"expectedBudget\": 450.00,\n  \"estimatedDuration\": \"2 weeks\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/applications",
+          "host": ["{{baseUrl}}"],
+          "path": ["applications"]
+        },
+        "description": "Submits an application for the authenticated freelancer. The freelancerId is read from the JWT — never from the body. Fields: projectId (required), proposal (required, max 5000 chars), expectedBudget (required, >= 0), estimatedDuration (required, max 50 chars). Status always starts as PENDING.\n\nExpected: 201 CREATED.\nErrors: 400 invalid payload · 401 missing/invalid JWT · 403 not a freelancer · 409 already applied to this project."
+      },
+      "response": []
+    },
+    {
+      "name": "Get My Applications",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{freelancerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/applications/my?page=0&size=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["applications", "my"],
+          "query": [
+            {
+              "key": "page",
+              "value": "0",
+              "description": "Zero-based page index. Optional (default 0)."
+            },
+            {
+              "key": "size",
+              "value": "20",
+              "description": "Page size. Optional (default 20)."
+            }
+          ]
+        },
+        "description": "Returns every application submitted by the authenticated freelancer (freelancerId from the JWT), most recently submitted first. The page object is carried in data.content.\n\nExpected: 200 OK.\nErrors: 401 missing/invalid JWT."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Applications for Project",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{creatorToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/applications/project/{{projectId}}?page=0&size=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["applications", "project", "{{projectId}}"],
+          "query": [
+            {
+              "key": "page",
+              "value": "0",
+              "description": "Zero-based page index. Optional (default 0)."
+            },
+            {
+              "key": "size",
+              "value": "20",
+              "description": "Page size. Optional (default 20)."
+            }
+          ]
+        },
+        "description": "Returns the applications received by the given project, most recently submitted first (creator role required). Verifying the creator owns the project is deferred to Day 6 (data lives in the Project Service).\n\nExpected: 200 OK.\nErrors: 400 invalid project id · 401 · 403 not a creator."
+      },
+      "response": []
+    },
+    {
+      "name": "Update Application Status (Accept/Reject)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{creatorToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"ACCEPTED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/applications/{{applicationId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["applications", "{{applicationId}}", "status"]
+        },
+        "description": "Assigns a new status to the application (creator role required). Valid decisions: ACCEPTED or REJECTED. The application must still be PENDING.\n\nExpected: 200 OK.\nErrors: 400 invalid payload/decision · 401 · 403 not a creator · 404 application not found · 409 application no longer pending."
+      },
+      "response": []
+    },
+    {
+      "name": "Withdraw Application",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{freelancerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/applications/{{applicationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["applications", "{{applicationId}}"]
+        },
+        "description": "Withdraws the application with the given id (soft-delete — status becomes WITHDRAWN). Only the freelancer who submitted it may withdraw it, and only while it is PENDING.\n\nExpected: 200 OK with null data.\nErrors: 400 invalid id · 401 · 403 not the application's freelancer · 404 not found · 409 no longer pending."
+      },
+      "response": []
+    },
+    {
+      "name": "Security - Missing Token (expect 401)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/applications/my",
+          "host": ["{{baseUrl}}"],
+          "path": ["applications", "my"]
+        },
+        "description": "No Authorization header.\n\nExpected: 401 Unauthorized."
+      },
+      "response": []
+    },
+    {
+      "name": "Security - Freelancer reads project applications (expect 403)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{freelancerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/applications/project/{{projectId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["applications", "project", "{{projectId}}"]
+        },
+        "description": "A freelancer tries to read a project's incoming applications.\n\nExpected: 403 Forbidden — only creators may view applications for a project."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8084",
+      "type": "string"
+    },
+    {
+      "key": "freelancerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "creatorToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "applicationId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
