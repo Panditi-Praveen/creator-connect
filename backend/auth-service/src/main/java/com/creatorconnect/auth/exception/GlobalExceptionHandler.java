@@ -12,6 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -29,6 +30,8 @@ import java.util.stream.Collectors;
  *   <li>{@link EmailAlreadyExistsException} &rarr; {@code 409 CONFLICT}.</li>
  *   <li>{@link UserNotFoundException} &amp; {@link InvalidCredentialsException}
  *       &rarr; {@code 401 UNAUTHORIZED} (login failures).</li>
+ *   <li>Unknown or trailing-slash paths &rarr; {@code 404 NOT_FOUND} via
+ *       {@code NoResourceFoundException}.</li>
  *   <li>Anything else &rarr; {@code 500 INTERNAL_SERVER_ERROR} with a generic
  *       message (the real cause is logged server-side).</li>
  * </ul>
@@ -124,12 +127,28 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Preserves the status of framework exceptions that already carry one.
+     * Handles requests that match no controller route and no static resource
+     * (e.g. a trailing-slash base path such as {@code /auth/}). Spring 6 no
+     * longer matches trailing slashes against controller mappings, so such
+     * paths fall through to the resource handler, which throws
+     * {@link NoResourceFoundException} — without this handler they would
+     * surface as a misleading 500 via the catch-all.
      *
-     * <p>Covers {@code NoResourceFoundException} (unknown paths &rarr; 404) and
-     * any future {@code ResponseStatusException} (e.g. 401/403 from the JWT
-     * layer in later phases). Without this, those would fall into the generic
-     * handler and incorrectly surface as 500.
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 404 NOT_FOUND} with a generic resource message
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, "Resource not found", request);
+    }
+
+    /**
+     * Preserves the status of framework exceptions that already carry one
+     * (unknown paths are handled separately by {@link #handleNoResourceFound}).
+     * Without this, such exceptions would fall into the generic handler and
+     * incorrectly surface as 500.
      *
      * @param ex      the thrown exception
      * @param request the originating HTTP request

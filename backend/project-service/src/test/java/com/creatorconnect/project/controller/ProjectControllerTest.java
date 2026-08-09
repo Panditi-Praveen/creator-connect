@@ -309,6 +309,14 @@ class ProjectControllerTest {
                 .andExpect(jsonPath("$.status").value(400));
     }
 
+    @Test
+    void unknownPath_withTrailingSlash_returns404() throws Exception {
+        mockMvc.perform(get("/projects/").header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+    }
+
     private String validCreatePayload() {
         // The deadline is computed at runtime so the @Future constraint on
         // ProjectRequest can never make this test fail as time moves forward.

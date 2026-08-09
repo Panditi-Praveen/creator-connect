@@ -63,7 +63,8 @@ public class ApplicationController {
      * Applies the authenticated freelancer to a project.
      *
      * <p>The {@code freelancerId} is taken from the JWT — a caller can never
-     * apply on behalf of someone else. Duplicate applications for the same
+     * apply on behalf of someone else. The project must exist in the Project
+     * Service (verified via OpenFeign); duplicate applications for the same
      * project yield {@code 409 CONFLICT}.
      *
      * @param request        the validated create payload
@@ -75,7 +76,8 @@ public class ApplicationController {
     @Operation(
             summary = "Apply to project",
             description = "Submits an application for the authenticated user (freelancer only). The "
-                    + "freelancerId is taken from the JWT, not from the request body. Applying twice to "
+                    + "freelancerId is taken from the JWT, not from the request body. The project "
+                    + "must exist in the Project Service (verified via OpenFeign); applying twice to "
                     + "the same project yields 409."
     )
     @ApiResponses({
@@ -88,7 +90,11 @@ public class ApplicationController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "403", description = "Not a freelancer"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "409", description = "Already applied to this project")
+                    responseCode = "404", description = "Project not found"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "Already applied to this project"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "503", description = "Project Service unavailable")
     })
     public ResponseEntity<ApiResponse<ApplicationResponse>> apply(
             @Valid @RequestBody ApplicationRequest request,
@@ -150,12 +156,13 @@ public class ApplicationController {
     }
 
     /**
-     * Returns the applications received by a project (creator only).
+     * Returns the applications received by a project (creator owner only).
      *
-     * <p>Only authenticated {@code CREATOR}s may read a project's incoming
-     * applications — anyone else receives {@code 403 FORBIDDEN}. Verifying the
-     * creator actually owns the project is deferred to Day 6 (the owner data
-     * lives in the Project Service).
+     * <p>Only authenticated {@code CREATOR}s who <em>own</em> the project may
+     * read its incoming applications — anyone else receives {@code 403
+     * FORBIDDEN}. Ownership is verified against the Project Service (the
+     * project's owner is fetched via OpenFeign); a project that does not
+     * exist there yields {@code 404 NOT_FOUND}.
      *
      * @param projectId    the project's id
      * @param pageable     the paging/sorting specification (from query params)
@@ -167,8 +174,9 @@ public class ApplicationController {
     @Operation(
             summary = "Get applications for project",
             description = "Returns the applications received by the given project, most recently "
-                    + "submitted first (creator only). Supports pagination via page/size query "
-                    + "parameters (default 0/20)."
+                    + "submitted first. Only the creator who owns the project may read them "
+                    + "(ownership is verified against the Project Service). Supports pagination "
+                    + "via page/size query parameters (default 0/20)."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -178,7 +186,11 @@ public class ApplicationController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "401", description = "Missing or invalid JWT"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "403", description = "Not a creator")
+                    responseCode = "403", description = "Not a creator or not the project owner"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "Project not found"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "503", description = "Project Service unavailable")
     })
     public ResponseEntity<ApiResponse<Page<ApplicationResponse>>> getApplicationsForProject(
             @PathVariable UUID projectId,
@@ -189,7 +201,7 @@ public class ApplicationController {
 
         HiringPrincipal principal = (HiringPrincipal) authentication.getPrincipal();
         Page<ApplicationResponse> applications =
-                applicationService.getApplicationsForProject(principal.role(), projectId, pageable);
+                applicationService.getApplicationsForProject(principal.userId(), principal.role(), projectId, pageable);
         return ResponseEntity.ok(ApiResponse.success(
                 HttpStatus.OK.value(),
                 "Applications retrieved successfully",
@@ -201,9 +213,10 @@ public class ApplicationController {
     /**
      * Updates the status of an application (creator decision).
      *
-     * <p>Only authenticated {@code CREATOR}s may decide; the only valid
-     * decisions are {@code ACCEPTED} and {@code REJECTED}, and only on
-     * applications that are still {@code PENDING}.
+     * <p>Only authenticated {@code CREATOR}s who own the application's
+     * project may decide (ownership is verified against the Project Service);
+     * the only valid decisions are {@code ACCEPTED} and {@code REJECTED}, and
+     * only on applications that are still {@code PENDING}.
      *
      * @param id             the application's id
      * @param request        the validated decision payload
@@ -214,8 +227,10 @@ public class ApplicationController {
     @PutMapping("/{id}/status")
     @Operation(
             summary = "Update application status",
-            description = "Assigns a new status to the application with the given id (creator only). "
-                    + "Valid decisions are ACCEPTED and REJECTED; the application must still be PENDING."
+            description = "Assigns a new status to the application with the given id. Only the creator "
+                    + "who owns the application's project may decide (ownership is verified against "
+                    + "the Project Service). Valid decisions are ACCEPTED and REJECTED; the "
+                    + "application must still be PENDING."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -225,11 +240,13 @@ public class ApplicationController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "401", description = "Missing or invalid JWT"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "403", description = "Not a creator"),
+                    responseCode = "403", description = "Not a creator or not the project owner"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "404", description = "Application not found"),
+                    responseCode = "404", description = "Application or project not found"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "409", description = "Application is no longer pending")
+                    responseCode = "409", description = "Application is no longer pending"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "503", description = "Project Service unavailable")
     })
     public ResponseEntity<ApiResponse<ApplicationResponse>> updateStatus(
             @PathVariable UUID id,
@@ -238,7 +255,7 @@ public class ApplicationController {
             HttpServletRequest httpRequest) {
 
         HiringPrincipal principal = (HiringPrincipal) authentication.getPrincipal();
-        ApplicationResponse updated = applicationService.updateStatus(principal.role(), id, request);
+        ApplicationResponse updated = applicationService.updateStatus(principal.userId(), principal.role(), id, request);
         return ResponseEntity.ok(ApiResponse.success(
                 HttpStatus.OK.value(),
                 "Application status updated successfully",

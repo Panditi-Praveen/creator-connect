@@ -91,6 +91,20 @@ class ApplicationRepositoryTest {
     }
 
     @Test
+    void existsByProjectIdAndFreelancerIdAndStatus_checksApplicationStatus() {
+        Application pending = application(PROJECT_A, FREELANCER_1);
+        pending.setStatus(ApplicationStatus.ACCEPTED);
+        applicationRepository.save(pending);
+
+        assertThat(applicationRepository.existsByProjectIdAndFreelancerIdAndStatus(
+                PROJECT_A, FREELANCER_1, ApplicationStatus.ACCEPTED)).isTrue();
+        assertThat(applicationRepository.existsByProjectIdAndFreelancerIdAndStatus(
+                PROJECT_A, FREELANCER_1, ApplicationStatus.PENDING)).isFalse();
+        assertThat(applicationRepository.existsByProjectIdAndFreelancerIdAndStatus(
+                PROJECT_B, FREELANCER_1, ApplicationStatus.ACCEPTED)).isFalse();
+    }
+
+    @Test
     void paginatedListing_returnsRequestedPage() {
         applicationRepository.save(application(PROJECT_A, FREELANCER_1));
         applicationRepository.save(application(PROJECT_A, FREELANCER_2));

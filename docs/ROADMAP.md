@@ -34,15 +34,15 @@ This document outlines the day-by-day development plan for the CreatorConnect MV
 **Goal:** Implement user registration, login, JWT, and role-based access.
 
 **Deliverables:**
-- [ ] Auth service module created (Port 8081)
-- [ ] User entity and database schema
-- [ ] Registration endpoint (`POST /api/auth/register`)
-- [ ] Login endpoint (`POST /api/auth/login`)
-- [ ] JWT token generation and validation
-- [ ] BCrypt password hashing
-- [ ] Role-based access (CREATOR, FREELANCER)
-- [ ] Gateway routing to auth service
-- [ ] API testing with Postman
+- [x] Auth service module created (Port 8081)
+- [x] User entity and database schema
+- [x] Registration endpoint (`POST /auth/register`)
+- [x] Login endpoint (`POST /auth/login`)
+- [x] JWT token generation and validation
+- [x] BCrypt password hashing
+- [x] Role-based access (CREATOR, FREELANCER)
+- [x] Gateway routing to auth service
+- [x] API testing with Postman
 
 **Services:** `auth-service`
 
@@ -53,15 +53,13 @@ This document outlines the day-by-day development plan for the CreatorConnect MV
 **Goal:** Implement creator and freelancer profiles, skills management, and portfolio.
 
 **Deliverables:**
-- [ ] Profile service module created (Port 8082)
-- [ ] CreatorProfile and FreelancerProfile entities
-- [ ] Skill entity and FreelancerSkill mapping
-- [ ] Portfolio entity
-- [ ] Profile CRUD endpoints
-- [ ] Skill management endpoints
-- [ ] Portfolio CRUD endpoints
-- [ ] Gateway routing to profile service
-- [ ] API testing with Postman
+- [x] Profile service module created (Port 8082)
+- [x] Profile entity and schema (single unified model for creators and freelancers — the separate CreatorProfile/FreelancerProfile split was consolidated)
+- [x] Skills support (stored as a field on the Profile model rather than a separate Skill entity)
+- [ ] Portfolio entity and CRUD endpoints (deferred — profiles carry portfolio/link fields instead)
+- [x] Profile CRUD endpoints (`POST /profile`, `GET /profile/me`, `GET /profile/{userId}`, `PUT /profile/{userId}`, `DELETE /profile/{userId}`)
+- [x] Gateway routing to profile service
+- [x] API testing with Postman
 
 **Services:** `profile-service`
 
@@ -72,13 +70,13 @@ This document outlines the day-by-day development plan for the CreatorConnect MV
 **Goal:** Implement project posting, browsing, and management.
 
 **Deliverables:**
-- [ ] Project service module created (Port 8083)
-- [ ] Project entity and schema
-- [ ] Project CRUD endpoints
-- [ ] Project listing with filters
-- [ ] Project status management
-- [ ] Gateway routing to project service
-- [ ] API testing with Postman
+- [x] Project service module created (Port 8083)
+- [x] Project entity and schema
+- [x] Project CRUD endpoints
+- [x] Project listing with filters
+- [x] Project status management
+- [x] Gateway routing to project service
+- [x] API testing with Postman
 
 **Services:** `project-service`
 
@@ -89,16 +87,15 @@ This document outlines the day-by-day development plan for the CreatorConnect MV
 **Goal:** Implement project applications, shortlisting, hiring workflow, and reviews.
 
 **Deliverables:**
-- [ ] Hiring service module created (Port 8084)
-- [ ] Application entity and schema
-- [ ] Application endpoints (apply, view, withdraw)
-- [ ] Shortlisting endpoints
-- [ ] Hiring endpoints
-- [ ] Review entity and schema
-- [ ] Review endpoints
-- [ ] Business rules enforced (duplicate prevention, authorization)
-- [ ] Gateway routing to hiring service
-- [ ] API testing with Postman
+- [x] Hiring service module created (Port 8084)
+- [x] Application entity and schema
+- [x] Application endpoints (apply, view, withdraw)
+- [x] Shortlisting / hiring workflow (implemented as a generic creator decision — `PUT /applications/{id}/status` with ACCEPTED or REJECTED)
+- [x] Review entity and schema
+- [x] Review endpoints
+- [x] Business rules enforced (duplicate prevention, authorization, owner-only reviews)
+- [x] Gateway routing to hiring service (via the `/hiring/**` `rewritePath` strip — see ARCHITECTURE.md)
+- [x] API testing with Postman
 
 **Services:** `hiring-service`
 
@@ -106,16 +103,22 @@ This document outlines the day-by-day development plan for the CreatorConnect MV
 
 ## Day 6 — Service Integration
 
-**Goal:** Integrate all services with OpenFeign communication and end-to-end workflow testing.
+**Goal:** Integrate services with OpenFeign communication and end-to-end workflow testing.
+
+**Status:** ✅ Mostly complete — the Hiring Service now integrates with the
+Project Service via OpenFeign (project existence + creator ownership
+verification, caller's JWT forwarded, gateway `/hiring/**` prefix rewrite in
+place). Remaining: Profile ↔ Project integration and a full end-to-end
+workflow run.
 
 **Deliverables:**
-- [ ] OpenFeign clients configured for inter-service communication
-- [ ] Auth service integration (token validation across services)
-- [ ] Profile-service ↔ Project-service integration
-- [ ] Hiring-service ↔ Project-service integration
-- [ ] End-to-end workflow tested (register → create profile → post project → apply → hire → complete → review)
-- [ ] Error handling and edge cases
-- [ ] Postman collection updated
+- [x] OpenFeign clients configured for inter-service communication (`ProjectClient` in the Hiring Service)
+- [x] Auth service integration (token validation across services — every service validates the shared JWT)
+- [ ] Profile-service ↔ Project-service integration (planned)
+- [x] Hiring-service ↔ Project-service integration (project existence + creator ownership checks)
+- [ ] End-to-end workflow tested (register → create profile → post project → apply → hire → complete → review) — pending a full-stack run
+- [x] Error handling and edge cases (404 project not found, 403 not the owner, 503 Project Service unavailable)
+- [x] Postman collection updated (no new endpoints were added in Day 6 — the existing Hiring Service collection covers all APIs)
 
 **Services:** All backend services
 

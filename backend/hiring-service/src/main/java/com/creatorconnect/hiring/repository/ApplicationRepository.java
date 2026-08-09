@@ -1,6 +1,7 @@
 package com.creatorconnect.hiring.repository;
 
 import com.creatorconnect.hiring.entity.Application;
+import com.creatorconnect.hiring.entity.ApplicationStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -80,4 +81,21 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
      * @return {@code true} when an application already exists for the pair
      */
     boolean existsByProjectIdAndFreelancerId(UUID projectId, UUID freelancerId);
+
+    /**
+     * Reports whether the freelancer holds an application in the given status
+     * on the project.
+     *
+     * <p>Backs the review business rule that a freelancer can only be
+     * reviewed after they were hired ({@code ACCEPTED} application) — the
+     * proof of a working relationship, all within this service's own data.
+     *
+     * @param projectId    the project's id
+     * @param freelancerId the freelancer's id
+     * @param status       the required application status (e.g. {@code ACCEPTED})
+     * @return {@code true} when an application exists for the pair in the
+     *         given status
+     */
+    boolean existsByProjectIdAndFreelancerIdAndStatus(UUID projectId, UUID freelancerId,
+                                                      ApplicationStatus status);
 }

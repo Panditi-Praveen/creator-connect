@@ -18,7 +18,7 @@ CreatorConnect follows a **microservices architecture** using **Spring Cloud**, 
 ┌─────────────────────────────────────────────────────────────┐
 │                  API GATEWAY (Spring Cloud Gateway)           │
 │              Port 8080 — Single Entry Point                   │
-│         Routing, Authentication Filtering, Load Balancing     │
+│              Routing & Load Balancing (no token checks)       │
 └────┬────────┬────────┬────────┬────────┬────────┬───────────┘
      │        │        │        │        │        │
      ▼        ▼        ▼        ▼        ▼        ▼
@@ -57,17 +57,21 @@ All microservices register themselves with Eureka on startup. The API Gateway us
 
 **Purpose:** Single entry point for all client requests.
 
-Routes incoming requests to the appropriate microservice based on the request path. Performs authentication token validation at the gateway level before forwarding requests to downstream services.
+Routes incoming requests to the appropriate microservice based on the request path, load-balancing through Eureka. JWT validation happens **inside each microservice** — the gateway forwards the `Authorization` header unchanged and does not inspect tokens.
 
 **Configuration:**
 - Port: 8080
-- Dependency: `spring-cloud-starter-gateway`, `spring-cloud-starter-netflix-eureka-client`
+- Dependency: `spring-cloud-starter-gateway-server-webmvc`, `spring-cloud-starter-netflix-eureka-client`
 - Routes defined in `application.yml`:
-  - `/api/auth/**` → Auth Service (:8081)
-  - `/api/profiles/**` → Profile Service (:8082)
-  - `/api/projects/**` → Project Service (:8083)
-  - `/api/hiring/**` → Hiring Service (:8084)
-  - `/api/ai/**` → AI Service (:8085)
+  - `/auth/**` → Auth Service (:8081)
+  - `/profile/**` → Profile Service (:8082)
+  - `/projects/**` → Project Service (:8083)
+  - `/hiring/**` → Hiring Service (:8084)
+  - `/ai/**` → AI Service (:8085)
+- The Hiring Service's controllers are mapped at `/applications` and `/reviews`
+  (no `/hiring` prefix), so the hiring route applies a `rewritePath` filter
+  (`/hiring/(.*)` → `/$1`) that strips the prefix before forwarding:
+  `/hiring/applications` reaches the service as `/applications`.
 
 ### Auth Service (Port 8081)
 
@@ -83,38 +87,33 @@ Routes incoming requests to the appropriate microservice based on the request pa
 **API Endpoints:**
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/auth/register` | Register new user |
-| POST | `/api/auth/login` | Login and receive JWT |
-| GET | `/api/auth/validate` | Validate JWT token |
-| GET | `/api/auth/profile` | Get current user info |
+| POST | `/auth/register` | Register new user |
+| POST | `/auth/login` | Login and receive JWT |
+
+(JWT validation for protected endpoints is performed by every service, which
+shares the same HMAC signing secret and validates the issuer claim.)
 
 **Data:** User entity (id, email, password hash, role)
 
 ### Profile Service (Port 8082)
 
-**Purpose:** Manage creator and freelancer profiles.
+**Purpose:** Manage creator and freelancer profiles (one unified profile per user).
 
 **Responsibilities:**
-- Creator profile CRUD
-- Freelancer profile CRUD
-- Skill management
-- Portfolio management
-- Experience tracking
+- Profile CRUD (a single `Profile` model serves both creators and freelancers)
+- Skills, experience, availability, and portfolio/link fields
 
 **API Endpoints:**
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/profiles/freelancers` | List freelancers (with filters) |
-| GET | `/api/profiles/freelancers/{id}` | Get freelancer profile |
-| PUT | `/api/profiles/freelancers/{id}` | Update freelancer profile |
-| GET | `/api/profiles/creators/{id}` | Get creator profile |
-| PUT | `/api/profiles/creators/{id}` | Update creator profile |
-| POST | `/api/profiles/skills` | Add skill to freelancer |
-| DELETE | `/api/profiles/skills/{id}` | Remove skill |
-| POST | `/api/profiles/portfolio` | Add portfolio item |
-| DELETE | `/api/profiles/portfolio/{id}` | Remove portfolio item |
+| POST | `/profile` | Create my profile |
+| GET | `/profile/me` | Get my profile |
+| GET | `/profile/{userId}` | Get any user's profile |
+| PUT | `/profile/{userId}` | Update profile (owner only) |
+| DELETE | `/profile/{userId}` | Delete profile (owner only) |
 
-**Data:** CreatorProfile, FreelancerProfile, Skill, FreelancerSkill, Portfolio
+**Data:** Profile entity (unified creator/freelancer model — skills and experience
+are fields on the profile; there are no separate Skill/Portfolio entities)
 
 ### Project Service (Port 8083)
 
@@ -129,35 +128,46 @@ Routes incoming requests to the appropriate microservice based on the request pa
 **API Endpoints:**
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/projects` | Create project |
-| GET | `/api/projects` | List projects (with filters) |
-| GET | `/api/projects/{id}` | Get project details |
-| PUT | `/api/projects/{id}` | Update project |
-| DELETE | `/api/projects/{id}` | Delete/close project |
+| POST | `/projects` | Create project |
+| GET | `/projects` | List projects (with filters) |
+| GET | `/projects/my` | Get my projects |
+| GET | `/projects/{id}` | Get project details |
+| PUT | `/projects/{id}` | Update project |
+| DELETE | `/projects/{id}` | Delete/close project |
 
 **Data:** Project entity
 
 ### Hiring Service (Port 8084)
 
-**Purpose:** Manage applications, shortlisting, hiring, and reviews.
+**Purpose:** Manage applications, hiring decisions, and reviews.
 
 **Responsibilities:**
-- Application submission and management
-- Shortlisting workflow
-- Hiring workflow
-- Reviews and ratings
+- Application submission, viewing, and withdrawal
+- Creator decisions (ACCEPT / REJECT) on pending applications
+- Reviews and ratings (creator-owned projects only)
+- Project existence and creator project-ownership verification against the
+  Project Service (OpenFeign)
 
-**API Endpoints:**
+**API Endpoints** (gateway paths — the `/hiring` prefix is stripped before forwarding):
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/hiring/applications` | Apply to project |
-| GET | `/api/hiring/applications/project/{id}` | Get applications for project |
-| PUT | `/api/hiring/applications/{id}/shortlist` | Shortlist applicant |
-| PUT | `/api/hiring/applications/{id}/hire` | Hire applicant |
-| POST | `/api/hiring/reviews` | Submit review |
-| GET | `/api/hiring/reviews/freelancer/{id}` | Get freelancer reviews |
+| POST | `/hiring/applications` | Apply to project |
+| GET | `/hiring/applications/my` | Get my applications |
+| GET | `/hiring/applications/project/{projectId}` | Get applications for a project (owner only) |
+| PUT | `/hiring/applications/{id}/status` | Accept/reject an application (owner only) |
+| DELETE | `/hiring/applications/{id}` | Withdraw application |
+| POST | `/hiring/reviews` | Submit review (project owner only) |
+| GET | `/hiring/reviews/freelancer/{freelancerId}` | Get freelancer reviews + average rating |
 
 **Data:** Application, Review entities
+
+**Integration (Day 6):** via the `ProjectClient` OpenFeign client (resolved
+through Eureka, forwarding the caller's JWT), the service calls
+`GET /projects/{id}` on the Project Service to verify a project exists before
+accepting an application, and to verify the caller owns the project before
+exposing its applications, deciding on an application, or submitting a review.
+A missing project yields `404`, a non-owner `403`, and an unreachable Project
+Service `503`.
 
 ### AI Service (Port 8085)
 
@@ -170,11 +180,11 @@ Routes incoming requests to the appropriate microservice based on the request pa
 - Match against real freelancer profiles
 - Rank results by relevance
 
-**API Endpoints:**
+**API Endpoints (planned — the AI service is not implemented yet):**
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/ai/discover` | Natural language talent search |
-| GET | `/api/ai/status` | AI service health check |
+| POST | `/ai/discover` | Natural language talent search |
+| GET | `/ai/status` | AI service health check |
 
 **Data:** Interfaces with Profile Service for freelancer data; no own entities.
 
@@ -185,17 +195,43 @@ Routes incoming requests to the appropriate microservice based on the request pa
 ### Frontend → API Gateway → Microservice
 All frontend requests go through the API Gateway. The gateway:
 1. Receives the request from the React frontend
-2. Validates the JWT token (if applicable)
-3. Routes to the appropriate microservice based on path
+2. Routes to the appropriate microservice based on path (no token inspection at the gateway)
+3. The target microservice validates the JWT and serves the request (or rejects with 401/403)
 4. Returns the response to the frontend
 
 ### Inter-Service Communication (OpenFeign)
-Microservices communicate with each other using OpenFeign declarative REST clients:
+Microservices communicate with each other using OpenFeign declarative REST clients,
+resolved through Eureka for service discovery. Implemented today:
+- **Hiring Service → Project Service:** `GET /projects/{id}` to verify a project
+  exists and read its owner for creator ownership checks. The caller's JWT is
+  forwarded on the Feign call (the Project Service authenticates every request).
+
+Planned (not yet implemented):
 - **Project Service → Profile Service:** Fetch freelancer details during hiring
 - **AI Service → Profile Service:** Fetch freelancer profiles for matching
 - **Hiring Service → Project Service:** Update project status on hire
 
-All inter-service calls are authenticated and routed through Eureka for service discovery.
+---
+
+## Error Handling
+
+Every microservice translates failures into a consistent `ErrorResponse` body
+(`{ timestamp, status, error, message, path }`) through its own
+`GlobalExceptionHandler`:
+
+- **400** — validation failures, malformed JSON bodies, bad path variables
+- **401** — missing or invalid JWT (and failed login credentials in Auth)
+- **403** — authenticated but not authorized (non-owner, wrong role)
+- **404** — resource not found
+- **409** — duplicate resource or conflicting state
+- **503** — downstream service unavailable (Hiring Service → Project Service)
+- **500** — unexpected errors (logged server-side; generic message returned)
+
+**Unknown paths.** Spring 6 no longer matches trailing slashes against
+controller mappings, so a path like `/projects/` (or any unmatched path) falls
+through to the static-resource handler. Every service's `GlobalExceptionHandler`
+handles the resulting `NoResourceFoundException` and returns **404** with the
+standard body (`"message": "Resource not found"`) instead of a 500.
 
 ---
 
@@ -205,21 +241,27 @@ All inter-service calls are authenticated and routed through Eureka for service 
 User Request
     │
     ▼
-API Gateway
+API Gateway — routes by path only (no token inspection)
     │
-    ├── Public routes (register, login) → pass through
+    ▼
+Microservice — validates the bearer JWT
     │
-    └── Protected routes → JWT validation
+    ├── Public endpoints (register, login) → served without a token
+    │
+    └── Protected endpoints → valid JWT required
             │
             ▼
-        If valid → extract user context, forward to service
-        If invalid → return 401 Unauthorized
+        If valid → principal from token claims (userId, email, role)
+        If invalid / missing → 401 Unauthorized
 ```
 
 - **JWT tokens** are issued by the Auth Service on login
 - **Tokens contain:** userId, email, role (CREATOR/FREELANCER)
-- **Gateway** validates tokens before routing to downstream services
-- **Services** can also validate tokens for inter-service communication
+- **Every microservice** validates the JWT (shared HMAC secret, issuer
+  check) before serving protected endpoints; the gateway does not inspect
+  tokens and forwards the `Authorization` header unchanged
+- **Services** validate the caller's JWT for inter-service communication
+  (the Feign client forwards it on outbound calls)
 - **Passwords** hashed with BCrypt (never stored in plain text)
 
 ---
@@ -229,7 +271,7 @@ API Gateway
 ### Option 1: Shared Database (MVP)
 Single MySQL database with schema-per-module naming:
 - `auth_` tables (users)
-- `profile_` tables (profiles, skills, portfolio)
+- `profile_` tables (profiles)
 - `project_` tables (projects)
 - `hiring_` tables (applications, reviews)
 

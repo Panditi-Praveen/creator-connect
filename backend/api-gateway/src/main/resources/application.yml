@@ -26,6 +26,16 @@ spring:
             uri: lb://hiring-service
             predicates:
               - Path=/hiring/**
+            # Strip the /hiring prefix before forwarding: the Hiring Service's
+            # controllers are mapped at /applications and /reviews (no /hiring
+            # prefix), so without this rewrite /hiring/** would 404 downstream.
+            # The replacement uses $1 (numbered group) rather than ${segment}
+            # to avoid Spring Boot resolving the ${...} as a placeholder.
+            filters:
+              - name: rewritePath
+                args:
+                  regexp: /hiring/(.*)
+                  replacement: /$1
           - id: ai-service
             uri: lb://ai-service
             predicates:

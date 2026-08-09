@@ -1,6 +1,7 @@
 package com.creatorconnect.hiring.exception;
 
 import com.creatorconnect.hiring.dto.response.ErrorResponse;
+import feign.FeignException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -26,16 +28,27 @@ import java.util.stream.Collectors;
  * body {@code { timestamp, status, error, message, path }} with the matching
  * HTTP status:
  * <ul>
- *   <li>{@link ApplicationNotFoundException} &rarr; {@code 404 NOT_FOUND}.</li>
- *   <li>{@link ApplicationAccessDeniedException} &rarr; {@code 403 FORBIDDEN}.</li>
+ *   <li>{@link ApplicationNotFoundException} &amp;
+ *       {@link ProjectNotFoundException} &rarr; {@code 404 NOT_FOUND}.</li>
+ *   <li>{@link ApplicationAccessDeniedException} &amp;
+ *       {@link ReviewAccessDeniedException} &rarr; {@code 403 FORBIDDEN}.</li>
+ *   <li>{@link FeignException} &rarr; {@code 503 SERVICE_UNAVAILABLE} when
+ *       the Project Service cannot be reached (connection failures / 5xx).
+ *       Note {@code 404} from the Project Service is already translated into
+ *       {@link ProjectNotFoundException} by {@code ProjectClientService} and
+ *       never reaches this handler.</li>
  *   <li>{@link DuplicateApplicationException} &amp;
- *       {@link ApplicationStatusConflictException} &rarr; {@code 409 CONFLICT}.</li>
- *   <li>{@link ApplicationValidationException} &rarr; {@code 400 BAD_REQUEST}
+ *       {@link ApplicationStatusConflictException} &amp;
+ *       {@link DuplicateReviewException} &rarr; {@code 409 CONFLICT}.</li>
+ *   <li>{@link ApplicationValidationException} &amp;
+ *       {@link ReviewValidationException} &rarr; {@code 400 BAD_REQUEST}
  *       for business rules Bean Validation cannot express.</li>
  *   <li>{@link MethodArgumentNotValidException} &rarr; {@code 400 BAD_REQUEST}
  *       with the collected field-level validation errors.</li>
  *   <li>{@link HttpMessageNotReadableException} &amp; type mismatches &rarr;
  *       {@code 400 BAD_REQUEST} for malformed bodies / bad path variables.</li>
+ *   <li>Unknown or trailing-slash paths &rarr; {@code 404 NOT_FOUND} via
+ *       {@code NoResourceFoundException}.</li>
  *   <li>Anything else &rarr; {@code 500 INTERNAL_SERVER_ERROR} with a generic
  *       message (the real cause is logged server-side).</li>
  * </ul>
@@ -56,6 +69,40 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleApplicationNotFound(ApplicationNotFoundException ex,
                                                                    HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    /**
+     * Handles requests for a project that does not exist in the Project
+     * Service.
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 404 NOT_FOUND} with the exception message
+     */
+    @ExceptionHandler(ProjectNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleProjectNotFound(ProjectNotFoundException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    /**
+     * Handles failures to reach the Project Service (connection errors,
+     * timeouts or downstream 5xx) while verifying a project.
+     *
+     * <p>{@code 404 NOT_FOUND} answers from the Project Service are already
+     * translated into {@link ProjectNotFoundException} by
+     * {@code ProjectClientService} and are handled above.
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 503 SERVICE_UNAVAILABLE} with a generic message
+     */
+    @ExceptionHandler(FeignException.class)
+    public ResponseEntity<ErrorResponse> handleFeignFailure(FeignException ex, HttpServletRequest request) {
+        log.warn("Project Service call failed while processing request {} (status {}): {}",
+                request.getRequestURI(), ex.status(), ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "Project Service is unavailable, please try again later", request);
     }
 
     /**
@@ -111,6 +158,49 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApplicationValidationException.class)
     public ResponseEntity<ErrorResponse> handleApplicationValidation(ApplicationValidationException ex,
                                                                      HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    }
+
+    /**
+     * Handles review operations a user is not allowed to perform (e.g. a
+     * non-creator submitting a review).
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 403 FORBIDDEN} with the exception message
+     */
+    @ExceptionHandler(ReviewAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleReviewAccessDenied(ReviewAccessDeniedException ex,
+                                                                  HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), request);
+    }
+
+    /**
+     * Handles attempts to review a freelancer on a project they were already
+     * reviewed on.
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 409 CONFLICT} with the exception message
+     */
+    @ExceptionHandler(DuplicateReviewException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateReview(DuplicateReviewException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    /**
+     * Handles reviews that violate a business rule Bean Validation cannot
+     * express (e.g. reviewing a freelancer who was never hired on the
+     * project).
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 400 BAD_REQUEST} with the exception message
+     */
+    @ExceptionHandler(ReviewValidationException.class)
+    public ResponseEntity<ErrorResponse> handleReviewValidation(ReviewValidationException ex,
+                                                                HttpServletRequest request) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
@@ -219,10 +309,28 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Preserves the status of framework exceptions that already carry one.
+     * Handles requests that match no controller route and no static resource
+     * (e.g. a trailing-slash base path such as {@code /applications/}). Spring 6
+     * no longer matches trailing slashes against controller mappings, so such
+     * paths fall through to the resource handler, which throws
+     * {@link NoResourceFoundException} — without this handler they would
+     * surface as a misleading 500 via the catch-all.
      *
-     * <p>Covers {@code NoResourceFoundException} (unknown paths &rarr; 404)
-     * and any future {@code ResponseStatusException}.
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 404 NOT_FOUND} with a generic resource message
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, "Resource not found", request);
+    }
+
+    /**
+     * Preserves the status of framework exceptions that already carry one
+     * (unknown paths are handled separately by {@link #handleNoResourceFound}).
+     * Without this, such exceptions would fall into the generic handler and
+     * incorrectly surface as 500.
      *
      * @param ex      the thrown exception
      * @param request the originating HTTP request

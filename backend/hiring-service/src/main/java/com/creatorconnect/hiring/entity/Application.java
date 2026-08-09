@@ -39,9 +39,8 @@ import java.util.UUID;
  * in the {@code userId} claim of the JWT issued by the Auth Service; the
  * project is referenced by {@code projectId} only — the Hiring Service does
  * not store (or read) project data, which lives in the Project Service.
- * Project existence and creator project-ownership are deliberately <em>not</em>
- * verified here yet; that cross-service integration is scheduled for Day 6
- * (Hiring Service &harr; Project Service via OpenFeign).
+ * Project existence and creator project-ownership are verified at the service
+ * layer against the Project Service via OpenFeign ({@code ProjectClient}).
  *
  * <p>Design decisions:
  * <ul>

@@ -8,11 +8,15 @@ import com.creatorconnect.hiring.exception.ApplicationNotFoundException;
 import com.creatorconnect.hiring.exception.ApplicationStatusConflictException;
 import com.creatorconnect.hiring.exception.ApplicationValidationException;
 import com.creatorconnect.hiring.exception.DuplicateApplicationException;
+import com.creatorconnect.hiring.exception.ProjectNotFoundException;
 import com.creatorconnect.hiring.security.JwtAuthenticationEntryPoint;
 import com.creatorconnect.hiring.security.JwtAuthenticationFilter;
 import com.creatorconnect.hiring.security.JwtService;
 import com.creatorconnect.hiring.service.ApplicationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import feign.FeignException;
+import feign.Request;
+import feign.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +32,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -142,6 +148,33 @@ class ApplicationControllerTest {
     }
 
     @Test
+    void apply_whenProjectMissing_returns404() throws Exception {
+        when(applicationService.apply(eq(FREELANCER_ID), eq("FREELANCER"), any()))
+                .thenThrow(new ProjectNotFoundException("Project not found: " + PROJECT_ID));
+
+        mockMvc.perform(post("/applications")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validApplyPayload()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    void apply_whenProjectServiceUnavailable_returns503() throws Exception {
+        when(applicationService.apply(eq(FREELANCER_ID), eq("FREELANCER"), any()))
+                .thenThrow(feignException());
+
+        mockMvc.perform(post("/applications")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validApplyPayload()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message").value("Project Service is unavailable, please try again later"));
+    }
+
+    @Test
     void apply_byCreator_returns403() throws Exception {
         when(jwtService.extractRole(anyString())).thenReturn("CREATOR");
         when(applicationService.apply(eq(FREELANCER_ID), eq("CREATOR"), any()))
@@ -186,7 +219,7 @@ class ApplicationControllerTest {
     @Test
     void getApplicationsForProject_byCreator_returns200() throws Exception {
         when(jwtService.extractRole(anyString())).thenReturn("CREATOR");
-        when(applicationService.getApplicationsForProject(eq("CREATOR"), eq(PROJECT_ID), any()))
+        when(applicationService.getApplicationsForProject(eq(FREELANCER_ID), eq("CREATOR"), eq(PROJECT_ID), any()))
                 .thenReturn(new PageImpl<>(List.of(applicationResponse(ApplicationStatus.PENDING))));
 
         mockMvc.perform(get("/applications/project/{projectId}", PROJECT_ID)
@@ -197,7 +230,7 @@ class ApplicationControllerTest {
 
     @Test
     void getApplicationsForProject_byFreelancer_returns403() throws Exception {
-        when(applicationService.getApplicationsForProject(eq("FREELANCER"), eq(PROJECT_ID), any()))
+        when(applicationService.getApplicationsForProject(eq(FREELANCER_ID), eq("FREELANCER"), eq(PROJECT_ID), any()))
                 .thenThrow(new ApplicationAccessDeniedException("Only creators can view applications for a project"));
 
         mockMvc.perform(get("/applications/project/{projectId}", PROJECT_ID)
@@ -217,7 +250,7 @@ class ApplicationControllerTest {
     @Test
     void updateStatus_byCreator_returns200() throws Exception {
         when(jwtService.extractRole(anyString())).thenReturn("CREATOR");
-        when(applicationService.updateStatus(eq("CREATOR"), eq(APPLICATION_ID), any()))
+        when(applicationService.updateStatus(eq(FREELANCER_ID), eq("CREATOR"), eq(APPLICATION_ID), any()))
                 .thenReturn(applicationResponse(ApplicationStatus.ACCEPTED));
 
         mockMvc.perform(put("/applications/{id}/status", APPLICATION_ID)
@@ -231,7 +264,7 @@ class ApplicationControllerTest {
 
     @Test
     void updateStatus_byFreelancer_returns403() throws Exception {
-        when(applicationService.updateStatus(eq("FREELANCER"), eq(APPLICATION_ID), any()))
+        when(applicationService.updateStatus(eq(FREELANCER_ID), eq("FREELANCER"), eq(APPLICATION_ID), any()))
                 .thenThrow(new ApplicationAccessDeniedException("Only creators can update application status"));
 
         mockMvc.perform(put("/applications/{id}/status", APPLICATION_ID)
@@ -245,7 +278,7 @@ class ApplicationControllerTest {
     @Test
     void updateStatus_withIllegalDecision_returns400() throws Exception {
         when(jwtService.extractRole(anyString())).thenReturn("CREATOR");
-        when(applicationService.updateStatus(eq("CREATOR"), eq(APPLICATION_ID), any()))
+        when(applicationService.updateStatus(eq(FREELANCER_ID), eq("CREATOR"), eq(APPLICATION_ID), any()))
                 .thenThrow(new ApplicationValidationException("Status must be ACCEPTED or REJECTED"));
 
         mockMvc.perform(put("/applications/{id}/status", APPLICATION_ID)
@@ -259,7 +292,7 @@ class ApplicationControllerTest {
     @Test
     void updateStatus_whenMissing_returns404() throws Exception {
         when(jwtService.extractRole(anyString())).thenReturn("CREATOR");
-        when(applicationService.updateStatus(eq("CREATOR"), eq(APPLICATION_ID), any()))
+        when(applicationService.updateStatus(eq(FREELANCER_ID), eq("CREATOR"), eq(APPLICATION_ID), any()))
                 .thenThrow(new ApplicationNotFoundException("Application not found: " + APPLICATION_ID));
 
         mockMvc.perform(put("/applications/{id}/status", APPLICATION_ID)
@@ -273,7 +306,7 @@ class ApplicationControllerTest {
     @Test
     void updateStatus_whenNotPending_returns409() throws Exception {
         when(jwtService.extractRole(anyString())).thenReturn("CREATOR");
-        when(applicationService.updateStatus(eq("CREATOR"), eq(APPLICATION_ID), any()))
+        when(applicationService.updateStatus(eq(FREELANCER_ID), eq("CREATOR"), eq(APPLICATION_ID), any()))
                 .thenThrow(new ApplicationStatusConflictException(
                         "Only pending applications can be decided on (current status: REJECTED)"));
 
@@ -326,6 +359,14 @@ class ApplicationControllerTest {
                 .andExpect(jsonPath("$.status").value(400));
     }
 
+    @Test
+    void unknownPath_withTrailingSlash_returns404() throws Exception {
+        mockMvc.perform(get("/applications/").header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+    }
+
     private String validApplyPayload() {
         return """
                 {
@@ -335,6 +376,25 @@ class ApplicationControllerTest {
                   "estimatedDuration": "2 weeks"
                 }
                 """.formatted(PROJECT_ID);
+    }
+
+    /**
+     * Builds a realistic {@link FeignException} exactly as Feign would after
+     * the Project Service answers {@code 500}.
+     *
+     * @return the Feign failure exception
+     */
+    private FeignException feignException() {
+        Request request = Request.create(Request.HttpMethod.GET,
+                "http://localhost:8083/projects/" + PROJECT_ID,
+                Map.of(), null, StandardCharsets.UTF_8);
+        Response response = Response.builder()
+                .status(500)
+                .reason("Internal Server Error")
+                .request(request)
+                .headers(Map.of())
+                .build();
+        return FeignException.errorStatus("ProjectClient#getProject(UUID)", response);
     }
 
     private ApplicationResponse applicationResponse(ApplicationStatus status) {

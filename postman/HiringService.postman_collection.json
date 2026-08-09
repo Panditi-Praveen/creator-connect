@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "CreatorConnect - Hiring Service",
-    "description": "Hiring Service APIs — freelancers apply to projects, creators manage and decide on applications.\n\nBase URL: http://localhost:8084 (direct).\n\nSetup:\n1. Register + login via the Auth Service to obtain JWTs for a FREELANCER and a CREATOR.\n2. Paste the freelancer's token into the collection variable `freelancerToken` and the creator's token into `creatorToken`.\n3. After creating a project (Project Service), copy its `id` into the collection variable `projectId`.\n4. After applying, copy the application `id` from the response into the collection variable `applicationId`.\n\nEndpoints:\n- POST   /applications                     Apply to project (freelancer only — 409 if already applied)\n- GET    /applications/my                  Get my applications (paginated: page, size)\n- GET    /applications/project/{projectId} Get applications for project (creator only)\n- PUT    /applications/{id}/status         Accept/reject application (creator only)\n- DELETE /applications/{id}                Withdraw application (own application only)",
+    "description": "Hiring Service APIs — freelancers apply to projects, creators manage and decide on applications, then review the freelancers they hired.\n\nBase URL: http://localhost:8084 (direct).\n\nSetup:\n1. Register + login via the Auth Service to obtain JWTs for a FREELANCER and a CREATOR.\n2. Paste the freelancer's token into the collection variable `freelancerToken` and the creator's token into `creatorToken`.\n3. After creating a project (Project Service), copy its `id` into the collection variable `projectId`.\n4. After applying, copy the application `id` from the response into the collection variable `applicationId`.\n5. Copy the freelancer's user `id` (the userId claim / freelancerId from an application response) into `freelancerId` — reviews are submitted against it.\n\nEndpoints:\n- POST   /applications                     Apply to project (freelancer only — 409 if already applied)\n- GET    /applications/my                  Get my applications (paginated: page, size)\n- GET    /applications/project/{projectId} Get applications for project (creator only)\n- PUT    /applications/{id}/status         Accept/reject application (creator only)\n- DELETE /applications/{id}                Withdraw application (own application only)\n- POST   /reviews                          Submit review for hired freelancer (creator only)\n- GET    /reviews/freelancer/{freelancerId} Get freelancer reviews + average rating",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -158,6 +158,60 @@
       "response": []
     },
     {
+      "name": "Submit Review",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{creatorToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"freelancerId\": \"{{freelancerId}}\",\n  \"rating\": 5,\n  \"reviewText\": \"Outstanding work, delivered ahead of schedule. Would hire again!\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/reviews",
+          "host": ["{{baseUrl}}"],
+          "path": ["reviews"]
+        },
+        "description": "Submits a review for the authenticated creator. The creatorId is read from the JWT — never from the body. Fields: projectId (required), freelancerId (required), rating (required, 1-5), reviewText (optional, max 2000 chars). The freelancer must hold an ACCEPTED application on the project (be hired) and may only be reviewed once per project.\n\nExpected: 201 CREATED.\nErrors: 400 invalid payload or freelancer not hired · 401 missing/invalid JWT · 403 not a creator · 409 already reviewed on this project."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Freelancer Reviews",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{creatorToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/reviews/freelancer/{{freelancerId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["reviews", "freelancer", "{{freelancerId}}"]
+        },
+        "description": "Returns every review received by the freelancer (newest first) together with the average rating across them. Any authenticated user may read the summary. When there are no reviews, reviews is empty, totalReviews is 0 and averageRating is 0.0.\n\nExpected: 200 OK.\nErrors: 400 invalid freelancer id · 401 missing/invalid JWT."
+      },
+      "response": []
+    },
+    {
       "name": "Security - Missing Token (expect 401)",
       "request": {
         "method": "GET",
@@ -214,6 +268,11 @@
     },
     {
       "key": "applicationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "freelancerId",
       "value": "",
       "type": "string"
     }

@@ -26,6 +26,15 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            # Fail fast instead of hanging when the Project Service is down.
+            connect-timeout: 3000
+            read-timeout: 5000
+
 eureka:
   client:
     service-url:

@@ -42,7 +42,17 @@ class GatewayRoutesEndpointTest {
                         "hiring-service", "ai-service")))
                 .andExpect(jsonPath("$.routes[?(@.id == 'auth-service')].uri",
                         hasItem("lb://auth-service")))
-                .andExpect(jsonPath("$..predicates[?(@.name == 'Path')]").isNotEmpty());
+                .andExpect(jsonPath("$..predicates[?(@.name == 'Path')]").isNotEmpty())
+                // The hiring-service route must strip the /hiring prefix before
+                // forwarding (its controllers are mapped at /applications and
+                // /reviews), so its rewritePath filter must be bound with the
+                // exact regexp/replacement args declared in application.yml.
+                .andExpect(jsonPath("$.routes[?(@.id == 'hiring-service')].filters[?(@.name == 'rewritePath')]")
+                        .isNotEmpty())
+                .andExpect(jsonPath("$.routes[?(@.id == 'hiring-service')].filters[?(@.name == 'rewritePath')].args.regexp")
+                        .value("/hiring/(.*)"))
+                .andExpect(jsonPath("$.routes[?(@.id == 'hiring-service')].filters[?(@.name == 'rewritePath')].args.replacement")
+                        .value("/$1"));
     }
 
     @Test

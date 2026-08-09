@@ -10,6 +10,8 @@ import com.creatorconnect.hiring.exception.ApplicationNotFoundException;
 import com.creatorconnect.hiring.exception.ApplicationStatusConflictException;
 import com.creatorconnect.hiring.exception.ApplicationValidationException;
 import com.creatorconnect.hiring.exception.DuplicateApplicationException;
+import com.creatorconnect.hiring.feign.ProjectClientService;
+import com.creatorconnect.hiring.feign.ProjectResponse;
 import com.creatorconnect.hiring.mapper.ApplicationMapper;
 import com.creatorconnect.hiring.repository.ApplicationRepository;
 import com.creatorconnect.hiring.service.ApplicationService;
@@ -28,14 +30,15 @@ import java.util.UUID;
  *   <li><b>Apply</b> — only {@code FREELANCER}s may apply; the caller's
  *       {@code userId} (from the JWT) becomes the {@code freelancerId}; a
  *       second application for the same project is rejected
- *       ({@link DuplicateApplicationException}).</li>
+ *       ({@link DuplicateApplicationException}). The project must exist in
+ *       the Project Service (verified via OpenFeign).</li>
  *   <li><b>View</b> — a freelancer sees only their own applications; a
- *       {@code CREATOR} sees a project's applications (verifying the creator
- *       actually owns the project is deferred to Day 6 — that data lives in
- *       the Project Service).</li>
- *   <li><b>Decide</b> — only {@code CREATOR}s may update status, and only
- *       {@code ACCEPTED} / {@code REJECTED} are valid decisions on a
- *       {@code PENDING} application.</li>
+ *       {@code CREATOR} sees a project's applications only if they own the
+ *       project (owner data is fetched from the Project Service via
+ *       OpenFeign).</li>
+ *   <li><b>Decide</b> — only {@code CREATOR}s may update status, only on
+ *       their own projects, and only {@code ACCEPTED} / {@code REJECTED} are
+ *       valid decisions on a {@code PENDING} application.</li>
  *   <li><b>Withdraw</b> — only the application's own freelancer may withdraw
  *       it, and only while it is {@code PENDING}.</li>
  * </ol>
@@ -52,17 +55,22 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     private final ApplicationRepository applicationRepository;
     private final ApplicationMapper applicationMapper;
+    private final ProjectClientService projectClientService;
 
     /**
      * Creates the service with its collaborators.
      *
      * @param applicationRepository the application data access layer
      * @param applicationMapper     the entity/DTO mapper
+     * @param projectClientService  the Project Service client used to verify
+     *                              project existence and ownership
      */
     public ApplicationServiceImpl(ApplicationRepository applicationRepository,
-                                  ApplicationMapper applicationMapper) {
+                                  ApplicationMapper applicationMapper,
+                                  ProjectClientService projectClientService) {
         this.applicationRepository = applicationRepository;
         this.applicationMapper = applicationMapper;
+        this.projectClientService = projectClientService;
     }
 
     /**
@@ -74,11 +82,13 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (!ROLE_FREELANCER.equalsIgnoreCase(role)) {
             throw new ApplicationAccessDeniedException("Only freelancers can apply to projects");
         }
-        // TODO(Day 6): verify the project exists via the Project Service
-        // (GET /projects/{id}) before accepting an application.
         if (applicationRepository.existsByProjectIdAndFreelancerId(request.getProjectId(), freelancerId)) {
             throw new DuplicateApplicationException("You have already applied to this project");
         }
+        // Verify the project exists in the Project Service before accepting
+        // the application (404 when it does not). Kept after the local
+        // duplicate check so repeat applicants never pay the network call.
+        projectClientService.getProject(request.getProjectId());
         Application application = applicationRepository.save(
                 applicationMapper.toEntity(freelancerId, request));
         return applicationMapper.toResponse(application);
@@ -99,12 +109,12 @@ public class ApplicationServiceImpl implements ApplicationService {
      */
     @Override
     @Transactional(readOnly = true)
-    public Page<ApplicationResponse> getApplicationsForProject(String role, UUID projectId, Pageable pageable) {
+    public Page<ApplicationResponse> getApplicationsForProject(UUID creatorId, String role, UUID projectId,
+                                                              Pageable pageable) {
         if (!ROLE_CREATOR.equalsIgnoreCase(role)) {
             throw new ApplicationAccessDeniedException("Only creators can view applications for a project");
         }
-        // TODO(Day 6): verify the caller owns the project via the Project
-        // Service before exposing its applications.
+        requireProjectOwner(creatorId, projectId);
         return applicationRepository.findByProjectId(projectId, pageable)
                 .map(applicationMapper::toResponse);
     }
@@ -114,18 +124,17 @@ public class ApplicationServiceImpl implements ApplicationService {
      */
     @Override
     @Transactional
-    public ApplicationResponse updateStatus(String role, UUID applicationId,
+    public ApplicationResponse updateStatus(UUID creatorId, String role, UUID applicationId,
                                             UpdateApplicationStatusRequest request) {
         if (!ROLE_CREATOR.equalsIgnoreCase(role)) {
             throw new ApplicationAccessDeniedException("Only creators can update application status");
         }
-        // TODO(Day 6): verify the caller owns the application's project via
-        // the Project Service before allowing the decision.
         ApplicationStatus requested = request.getStatus();
         if (requested != ApplicationStatus.ACCEPTED && requested != ApplicationStatus.REJECTED) {
             throw new ApplicationValidationException("Status must be ACCEPTED or REJECTED");
         }
         Application application = findApplication(applicationId);
+        requireProjectOwner(creatorId, application.getProjectId());
         if (application.getStatus() != ApplicationStatus.PENDING) {
             throw new ApplicationStatusConflictException(
                     "Only pending applications can be decided on (current status: " + application.getStatus() + ")");
@@ -162,5 +171,26 @@ public class ApplicationServiceImpl implements ApplicationService {
     private Application findApplication(UUID applicationId) {
         return applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ApplicationNotFoundException("Application not found: " + applicationId));
+    }
+
+    /**
+     * Verifies that the caller owns the project with the given id.
+     *
+     * <p>The project's owner is fetched from the Project Service via OpenFeign
+     * and compared against the caller's {@code userId}. Failures surface as
+     * {@code 404} (project missing) or {@code 403} (not the owner).
+     *
+     * @param userId    the caller's id (from the JWT)
+     * @param projectId the project's id
+     * @throws com.creatorconnect.hiring.exception.ProjectNotFoundException
+     *         when the project does not exist in the Project Service
+     * @throws ApplicationAccessDeniedException when the caller is not the
+     *         project's owner
+     */
+    private void requireProjectOwner(UUID userId, UUID projectId) {
+        ProjectResponse project = projectClientService.getProject(projectId);
+        if (!project.getUserId().equals(userId)) {
+            throw new ApplicationAccessDeniedException("You do not own this project");
+        }
     }
 }

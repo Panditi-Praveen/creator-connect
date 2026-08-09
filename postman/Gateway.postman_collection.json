@@ -61,6 +61,21 @@
         },
         "description": "Authenticates and returns a JWT access token.\n\nHeaders: Content-Type: application/json\nBody: email, password\n\nExpected: 200 OK\n{\n  \"status\": 200,\n  \"data\": {\n    \"accessToken\": \"<jwt>\",\n    \"tokenType\": \"Bearer\",\n    \"expiresIn\": 86400,\n    \"userId\": \"<uuid>\",\n    \"email\": \"...\",\n    \"role\": \"CREATOR\"\n  }\n}\n\nErrors: 401 invalid credentials · 400 malformed payload.\n\nTest script (auto-saves variables — userId is top-level in data, NOT nested under user):\nif (pm.response.code === 200) {\n  const data = pm.response.json().data;\n  pm.collectionVariables.set(\"jwtToken\", data.accessToken);\n  pm.collectionVariables.set(\"userId\", data.userId);\n}"
       },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "  const data = pm.response.json().data;",
+              "  pm.collectionVariables.set(\"jwtToken\", data.accessToken);",
+              "  pm.collectionVariables.set(\"userId\", data.userId);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "response": []
     },
     {
@@ -171,26 +186,7 @@
       },
       "response": []
     },
-    {
-      "name": "7. Delete Profile",
-      "request": {
-        "method": "DELETE",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{jwtToken}}",
-            "type": "text"
-          }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/profile/{{userId}}",
-          "host": ["{{baseUrl}}"],
-          "path": ["profile", "{{userId}}"]
-        },
-        "description": "Deletes the profile owned by userId.\n\nHeaders: Authorization: Bearer {{jwtToken}}\n\nExpected: 200 OK with empty data.\n\nErrors: 400 · 401 · 403 not the owner · 404 profile not found."
-      },
-      "response": []
-    },
+
     {
       "name": "Security - Missing Token (expect 401)",
       "request": {
@@ -275,6 +271,26 @@
           "path": ["profile", "{{userId}}"]
         },
         "description": "A SECOND user (token in {{otherJwtToken}}) tries to update the profile of {{userId}}.\n\nSetup: register+login a second account and set {{otherJwtToken}} to its accessToken.\n\nExpected: 403 Forbidden — ownership validation rejects non-owners."
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Profile",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwtToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{userId}}"]
+        },
+        "description": "Deletes the profile owned by userId.\n\nHeaders: Authorization: Bearer {{jwtToken}}\n\nExpected: 200 OK with empty data.\n\nErrors: 400 · 401 · 403 not the owner · 404 profile not found."
       },
       "response": []
     },
