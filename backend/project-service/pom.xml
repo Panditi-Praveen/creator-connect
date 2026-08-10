@@ -59,6 +59,15 @@
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
 
+        <!-- OpenFeign — declarative REST client for the Project Service &harr;
+             Profile Service integration (owner profile enrichment on project
+             reads). Version is managed by the Spring Cloud BOM in the parent
+             pom. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
         <!-- MySQL 8 JDBC Driver -->
         <dependency>
             <groupId>com.mysql</groupId>

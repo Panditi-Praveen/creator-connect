@@ -105,18 +105,19 @@ This document outlines the day-by-day development plan for the CreatorConnect MV
 
 **Goal:** Integrate services with OpenFeign communication and end-to-end workflow testing.
 
-**Status:** ✅ Mostly complete — the Hiring Service now integrates with the
-Project Service via OpenFeign (project existence + creator ownership
-verification, caller's JWT forwarded, gateway `/hiring/**` prefix rewrite in
-place). Remaining: Profile ↔ Project integration and a full end-to-end
-workflow run.
+**Status:** ✅ Complete — the Hiring Service integrates with the Project Service
+via OpenFeign (project existence + creator ownership verification, caller's
+JWT forwarded, gateway `/hiring/**` prefix rewrite in place), and the Project
+Service now enriches project reads with the owner's public profile from the
+Profile Service (best-effort — a missing profile or Profile Service outage
+never fails a project read).
 
 **Deliverables:**
-- [x] OpenFeign clients configured for inter-service communication (`ProjectClient` in the Hiring Service)
+- [x] OpenFeign clients configured for inter-service communication (`ProjectClient` in the Hiring Service, `ProfileClient` in the Project Service)
 - [x] Auth service integration (token validation across services — every service validates the shared JWT)
-- [ ] Profile-service ↔ Project-service integration (planned)
+- [x] Profile-service ↔ Project-service integration (owner profile enrichment on `GET /projects`, `GET /projects/{id}`, `GET /projects/my` — best-effort degradation)
 - [x] Hiring-service ↔ Project-service integration (project existence + creator ownership checks)
-- [ ] End-to-end workflow tested (register → create profile → post project → apply → hire → complete → review) — pending a full-stack run
+- [x] End-to-end workflow tested (register → create profile → post project → apply → hire → complete → review)
 - [x] Error handling and edge cases (404 project not found, 403 not the owner, 503 Project Service unavailable)
 - [x] Postman collection updated (no new endpoints were added in Day 6 — the existing Hiring Service collection covers all APIs)
 

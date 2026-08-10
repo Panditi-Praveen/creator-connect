@@ -7,6 +7,8 @@ import com.creatorconnect.project.dto.response.ProjectResponse;
 import com.creatorconnect.project.entity.Project;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
 import com.creatorconnect.project.exception.ProjectNotFoundException;
+import com.creatorconnect.project.feign.ProfileClientService;
+import com.creatorconnect.project.feign.ProfileResponse;
 import com.creatorconnect.project.mapper.ProjectMapper;
 import com.creatorconnect.project.repository.ProjectRepository;
 import com.creatorconnect.project.service.ProjectService;
@@ -24,7 +26,10 @@ import java.util.UUID;
  *   <li><b>Create</b> — the caller's {@code userId} (from the JWT) becomes the
  *       project owner.</li>
  *   <li><b>Get / Browse</b> — any authenticated user may view any project;
- *       missing projects yield {@link ProjectNotFoundException}.</li>
+ *       missing projects yield {@link ProjectNotFoundException}. Reads also
+ *       attach the owner's public profile ({@code ownerProfile}) fetched from
+ *       the Profile Service — best-effort, so a missing profile or a Profile
+ *       Service outage never fails the request.</li>
  *   <li><b>Update / Delete</b> — the caller must be the project owner; the
  *       check runs after the existence check so the API never leaks whether a
  *       project exists to non-owners ({@code 404} before {@code 403}).</li>
@@ -39,16 +44,22 @@ public class ProjectServiceImpl implements ProjectService {
 
     private final ProjectRepository projectRepository;
     private final ProjectMapper projectMapper;
+    private final ProfileClientService profileClientService;
 
     /**
      * Creates the service with its collaborators.
      *
-     * @param projectRepository the project data access layer
-     * @param projectMapper     the entity/DTO mapper
+     * @param projectRepository   the project data access layer
+     * @param projectMapper       the entity/DTO mapper
+     * @param profileClientService the Profile Service façade used to enrich
+     *                             project reads with the owner's public profile
      */
-    public ProjectServiceImpl(ProjectRepository projectRepository, ProjectMapper projectMapper) {
+    public ProjectServiceImpl(ProjectRepository projectRepository,
+                              ProjectMapper projectMapper,
+                              ProfileClientService profileClientService) {
         this.projectRepository = projectRepository;
         this.projectMapper = projectMapper;
+        this.profileClientService = profileClientService;
     }
 
     /**
@@ -78,6 +89,7 @@ public class ProjectServiceImpl implements ProjectService {
                         normalized.getKeyword()
                 ).stream()
                 .map(projectMapper::toResponse)
+                .map(this::enrichWithOwnerProfile)
                 .toList();
     }
 
@@ -89,6 +101,7 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectResponse getProjectById(UUID projectId) {
         return projectRepository.findById(projectId)
                 .map(projectMapper::toResponse)
+                .map(this::enrichWithOwnerProfile)
                 .orElseThrow(() -> new ProjectNotFoundException("Project not found: " + projectId));
     }
 
@@ -110,6 +123,7 @@ public class ProjectServiceImpl implements ProjectService {
                         normalized.getKeyword()
                 ).stream()
                 .map(projectMapper::toResponse)
+                .map(this::enrichWithOwnerProfile)
                 .toList();
     }
 
@@ -132,6 +146,26 @@ public class ProjectServiceImpl implements ProjectService {
     public void deleteProject(UUID authenticatedUserId, UUID projectId) {
         Project project = findOwnedProject(authenticatedUserId, projectId);
         projectRepository.delete(project);
+    }
+
+    /**
+     * Attaches the project owner's public profile to the response, fetched
+     * from the Profile Service.
+     *
+     * <p>Best-effort by design: the façade returns {@link java.util.Optional#empty()}
+     * when the owner has no profile or the Profile Service is unreachable, and
+     * the project is returned unchanged (its {@code ownerProfile} stays
+     * {@code null} and is omitted from the JSON). Enrichment must never fail a
+     * project read.
+     *
+     * @param response the mapped project response
+     * @return the response with {@code ownerProfile} attached, or the response
+     *         unchanged when no profile could be resolved
+     */
+    private ProjectResponse enrichWithOwnerProfile(ProjectResponse response) {
+        return profileClientService.getProfile(response.getUserId())
+                .map(profile -> response.toBuilder().ownerProfile(profile).build())
+                .orElse(response);
     }
 
     /**

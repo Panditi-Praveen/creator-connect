@@ -6,6 +6,7 @@ import com.creatorconnect.project.dto.response.ProjectResponse;
 import com.creatorconnect.project.entity.ProjectStatus;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
 import com.creatorconnect.project.exception.ProjectNotFoundException;
+import com.creatorconnect.project.feign.ProfileResponse;
 import com.creatorconnect.project.security.JwtAuthenticationEntryPoint;
 import com.creatorconnect.project.security.JwtAuthenticationFilter;
 import com.creatorconnect.project.security.JwtService;
@@ -199,6 +200,31 @@ class ProjectControllerTest {
         mockMvc.perform(get("/projects/{id}", PROJECT_ID).header("Authorization", "Bearer valid-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(PROJECT_ID.toString()));
+    }
+
+    @Test
+    void getProjectById_includesOwnerProfileWhenPresent() throws Exception {
+        ProjectResponse response = projectResponse().toBuilder()
+                .ownerProfile(new ProfileResponse(OWNER_ID, "Praveen", "Kumar",
+                        "Video Editor", "http://cdn.example.com/praveen.jpg", "After Effects"))
+                .build();
+        when(projectService.getProjectById(PROJECT_ID)).thenReturn(response);
+
+        mockMvc.perform(get("/projects/{id}", PROJECT_ID).header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ownerProfile.userId").value(OWNER_ID.toString()))
+                .andExpect(jsonPath("$.data.ownerProfile.firstName").value("Praveen"))
+                .andExpect(jsonPath("$.data.ownerProfile.headline").value("Video Editor"))
+                .andExpect(jsonPath("$.data.ownerProfile.skills").value("After Effects"));
+    }
+
+    @Test
+    void getProjectById_omitsOwnerProfileWhenAbsent() throws Exception {
+        when(projectService.getProjectById(PROJECT_ID)).thenReturn(projectResponse());
+
+        mockMvc.perform(get("/projects/{id}", PROJECT_ID).header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ownerProfile").doesNotExist());
     }
 
     @Test

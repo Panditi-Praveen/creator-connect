@@ -8,6 +8,8 @@ import com.creatorconnect.project.entity.Project;
 import com.creatorconnect.project.entity.ProjectStatus;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
 import com.creatorconnect.project.exception.ProjectNotFoundException;
+import com.creatorconnect.project.feign.ProfileClientService;
+import com.creatorconnect.project.feign.ProfileResponse;
 import com.creatorconnect.project.mapper.ProjectMapper;
 import com.creatorconnect.project.repository.ProjectRepository;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,9 @@ class ProjectServiceImplTest {
 
     @Mock
     private ProjectMapper projectMapper;
+
+    @Mock
+    private ProfileClientService profileClientService;
 
     @InjectMocks
     private ProjectServiceImpl projectService;
@@ -147,6 +152,82 @@ class ProjectServiceImplTest {
 
         assertThatThrownBy(() -> projectService.getProjectById(PROJECT_ID))
                 .isInstanceOf(ProjectNotFoundException.class);
+    }
+
+    @Test
+    void getProjectById_enrichesWithOwnerProfile() {
+        Project entity = project(OWNER_ID);
+        ProfileResponse ownerProfile = profileResponse();
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
+        when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
+        when(profileClientService.getProfile(OWNER_ID)).thenReturn(Optional.of(ownerProfile));
+
+        ProjectResponse response = projectService.getProjectById(PROJECT_ID);
+
+        assertThat(response.getId()).isEqualTo(PROJECT_ID);
+        assertThat(response.getOwnerProfile()).isEqualTo(ownerProfile);
+        verify(profileClientService).getProfile(OWNER_ID);
+    }
+
+    @Test
+    void getProjectById_whenOwnerHasNoProfile_leavesOwnerProfileNull() {
+        Project entity = project(OWNER_ID);
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
+        when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
+        when(profileClientService.getProfile(OWNER_ID)).thenReturn(Optional.empty());
+
+        ProjectResponse response = projectService.getProjectById(PROJECT_ID);
+
+        assertThat(response.getId()).isEqualTo(PROJECT_ID);
+        assertThat(response.getOwnerProfile()).isNull();
+    }
+
+    @Test
+    void getAllProjects_enrichesEachProjectWithOwnerProfile() {
+        Project entity = project(OWNER_ID);
+        ProfileResponse ownerProfile = profileResponse();
+        when(projectRepository.findAllByFilters(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(entity));
+        when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
+        when(profileClientService.getProfile(OWNER_ID)).thenReturn(Optional.of(ownerProfile));
+
+        List<ProjectResponse> responses = projectService.getAllProjects(ProjectFilter.builder().build());
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getOwnerProfile()).isEqualTo(ownerProfile);
+        verify(profileClientService).getProfile(OWNER_ID);
+    }
+
+    @Test
+    void getProjectsByUserId_enrichesWithOwnerProfile() {
+        Project entity = project(OWNER_ID);
+        ProfileResponse ownerProfile = profileResponse();
+        when(projectRepository.findByUserIdAndFilters(eq(OWNER_ID), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(entity));
+        when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
+        when(profileClientService.getProfile(OWNER_ID)).thenReturn(Optional.of(ownerProfile));
+
+        List<ProjectResponse> responses =
+                projectService.getProjectsByUserId(OWNER_ID, ProjectFilter.builder().build());
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getOwnerProfile()).isEqualTo(ownerProfile);
+        verify(profileClientService).getProfile(OWNER_ID);
+    }
+
+    @Test
+    void getProjectsByUserId_whenProfileServiceUnavailable_leavesOwnerProfileNull() {
+        Project entity = project(OWNER_ID);
+        when(projectRepository.findByUserIdAndFilters(eq(OWNER_ID), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(entity));
+        when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
+        when(profileClientService.getProfile(OWNER_ID)).thenReturn(Optional.empty());
+
+        List<ProjectResponse> responses =
+                projectService.getProjectsByUserId(OWNER_ID, ProjectFilter.builder().build());
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getOwnerProfile()).isNull();
     }
 
     @Test
@@ -285,5 +366,10 @@ class ProjectServiceImplTest {
                 .category("Video Editing")
                 .status(ProjectStatus.OPEN)
                 .build();
+    }
+
+    private ProfileResponse profileResponse() {
+        return new ProfileResponse(OWNER_ID, "Praveen", "Kumar",
+                "Video Editor", "http://cdn.example.com/praveen.jpg", "After Effects");
     }
 }

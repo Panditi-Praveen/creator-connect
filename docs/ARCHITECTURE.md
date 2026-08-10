@@ -137,6 +137,15 @@ are fields on the profile; there are no separate Skill/Portfolio entities)
 
 **Data:** Project entity
 
+**Integration (Day 6):** project reads are enriched with the owner's public
+profile via the `ProfileClient` OpenFeign client (resolved through Eureka,
+forwarding the caller's JWT): `GET /projects`, `GET /projects/{id}` and
+`GET /projects/my` attach an `ownerProfile` block (name, headline, profile
+image, skills) fetched from `GET /profile/{userId}` on the Profile Service.
+The enrichment is best-effort: a user may post a project before creating a
+profile (`404`), and a Profile Service outage must not take down the project
+feed — in both cases the project is returned with `ownerProfile` omitted.
+
 ### Hiring Service (Port 8084)
 
 **Purpose:** Manage applications, hiring decisions, and reviews.
@@ -206,8 +215,14 @@ resolved through Eureka for service discovery. Implemented today:
   exists and read its owner for creator ownership checks. The caller's JWT is
   forwarded on the Feign call (the Project Service authenticates every request).
 
+Implemented:
+- **Project Service → Profile Service:** Fetch the project owner's public
+  profile to enrich project reads (`GET /projects`, `GET /projects/{id}`,
+  `GET /projects/my`). The caller's JWT is forwarded and the enrichment is
+  best-effort — projects are returned unchanged (without `ownerProfile`) when
+  the owner has no profile or the Profile Service is unavailable.
+
 Planned (not yet implemented):
-- **Project Service → Profile Service:** Fetch freelancer details during hiring
 - **AI Service → Profile Service:** Fetch freelancer profiles for matching
 - **Hiring Service → Project Service:** Update project status on hire
 
