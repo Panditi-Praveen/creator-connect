@@ -28,6 +28,11 @@ import java.util.List;
  * {@code @NotNull} requirements — an update never requires re-sending the
  * mandatory fields.
  *
+ * <p>Setting {@code status} through this endpoint applies the same forward-only
+ * lifecycle state machine as the dedicated {@code PUT /projects/{id}/status}
+ * endpoint: illegal transitions (re-opening an in-progress project, changing a
+ * completed/cancelled project) are rejected with {@code 409 CONFLICT}.
+ *
  * <p>Validation failures are translated into {@code 400 BAD_REQUEST} responses
  * by {@code GlobalExceptionHandler}.
  */

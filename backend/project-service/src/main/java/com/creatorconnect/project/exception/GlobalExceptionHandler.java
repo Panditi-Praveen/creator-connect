@@ -71,6 +71,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles status transitions that are not allowed by the project lifecycle
+     * state machine (e.g. re-opening an in-progress project, or changing a
+     * completed/cancelled project).
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 409 CONFLICT} with the exception message
+     */
+    @ExceptionHandler(ProjectStatusConflictException.class)
+    public ResponseEntity<ErrorResponse> handleProjectStatusConflict(ProjectStatusConflictException ex,
+                                                                     HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    /**
      * Handles payloads that fail Jakarta Bean Validation.
      *
      * @param ex      the validation exception

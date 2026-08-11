@@ -3,6 +3,7 @@ package com.creatorconnect.project.controller;
 import com.creatorconnect.project.dto.request.ProjectFilter;
 import com.creatorconnect.project.dto.request.ProjectRequest;
 import com.creatorconnect.project.dto.request.UpdateProjectRequest;
+import com.creatorconnect.project.dto.request.UpdateProjectStatusRequest;
 import com.creatorconnect.project.dto.response.ApiResponse;
 import com.creatorconnect.project.dto.response.ProjectResponse;
 import com.creatorconnect.project.security.ProjectPrincipal;
@@ -261,6 +262,63 @@ public class ProjectController {
         return ResponseEntity.ok(ApiResponse.success(
                 HttpStatus.OK.value(),
                 "Project updated successfully",
+                updated,
+                httpRequest.getRequestURI()
+        ));
+    }
+
+    /**
+     * Moves the project through its lifecycle state machine (owner only).
+     *
+     * <p>Forward-only transitions are enforced: {@code OPEN &rarr; IN_PROGRESS /
+     * COMPLETED / CANCELLED}, {@code IN_PROGRESS &rarr; COMPLETED / CANCELLED};
+     * terminal states are locked; re-applying the current status is an
+     * idempotent no-op. Illegal transitions yield {@code 409 CONFLICT}. This is
+     * the endpoint the Hiring Service calls via OpenFeign when a creator
+     * accepts an application, automatically moving the project to
+     * {@code IN_PROGRESS}.
+     *
+     * @param id             the project's id
+     * @param request        the validated status-transition payload
+     * @param authentication the current security context
+     * @param httpRequest    the raw request (used to echo the request path)
+     * @return {@code 200 OK} with the updated project
+     */
+    @PutMapping("/{id}/status")
+    @Operation(
+            summary = "Update project status",
+            description = "Moves the project through its lifecycle state machine. Only the authenticated "
+                    + "owner may do so. Forward-only transitions are enforced (OPEN -> IN_PROGRESS / "
+                    + "COMPLETED / CANCELLED, IN_PROGRESS -> COMPLETED / CANCELLED); terminal states "
+                    + "are locked; re-applying the current status is an idempotent no-op. Illegal "
+                    + "transitions yield 409. The Hiring Service calls this endpoint when a creator "
+                    + "accepts an application (project -> IN_PROGRESS)."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "Project status updated"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "Invalid payload or project id"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "Missing or invalid JWT"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "Not the project owner"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "Project not found"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "Transition not allowed by the state machine")
+    })
+    public ResponseEntity<ApiResponse<ProjectResponse>> updateStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateProjectStatusRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+
+        ProjectPrincipal principal = (ProjectPrincipal) authentication.getPrincipal();
+        ProjectResponse updated = projectService.updateProjectStatus(principal.userId(), id, request.getStatus());
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(),
+                "Project status updated successfully",
                 updated,
                 httpRequest.getRequestURI()
         ));

@@ -90,7 +90,7 @@ This document outlines the day-by-day development plan for the CreatorConnect MV
 - [x] Hiring service module created (Port 8084)
 - [x] Application entity and schema
 - [x] Application endpoints (apply, view, withdraw)
-- [x] Shortlisting / hiring workflow (implemented as a generic creator decision — `PUT /applications/{id}/status` with ACCEPTED or REJECTED)
+- [x] Shortlisting / hiring workflow (implemented as a generic creator decision — `PUT /applications/{id}/status` with ACCEPTED or REJECTED; accepting a freelancer automatically moves the project to `IN_PROGRESS` via the Project Service, and reviews require the project to be `COMPLETED`)
 - [x] Review entity and schema
 - [x] Review endpoints
 - [x] Business rules enforced (duplicate prevention, authorization, owner-only reviews)
@@ -118,7 +118,8 @@ never fails a project read).
 - [x] Profile-service ↔ Project-service integration (owner profile enrichment on `GET /projects`, `GET /projects/{id}`, `GET /projects/my` — best-effort degradation)
 - [x] Hiring-service ↔ Project-service integration (project existence + creator ownership checks)
 - [x] End-to-end workflow tested (register → create profile → post project → apply → hire → complete → review)
-- [x] Error handling and edge cases (404 project not found, 403 not the owner, 503 Project Service unavailable)
+- [x] Project lifecycle integrated with hiring — `PUT /projects/{id}/status` on the Project Service enforces a forward-only state machine (OPEN → IN_PROGRESS/COMPLETED/CANCELLED, IN_PROGRESS → COMPLETED/CANCELLED; terminal states locked, illegal transitions → 409). Accepting an application moves the project to IN_PROGRESS automatically; reviews require the project to be COMPLETED.
+- [x] Error handling and edge cases (404 project not found, 403 not the owner, 409 illegal project transition, 503 Project Service unavailable)
 - [x] Postman collection updated (no new endpoints were added in Day 6 — the existing Hiring Service collection covers all APIs)
 
 **Services:** All backend services

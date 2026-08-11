@@ -13,6 +13,7 @@ import com.creatorconnect.hiring.exception.DuplicateApplicationException;
 import com.creatorconnect.hiring.exception.ProjectNotFoundException;
 import com.creatorconnect.hiring.feign.ProjectClientService;
 import com.creatorconnect.hiring.feign.ProjectResponse;
+import com.creatorconnect.hiring.feign.ProjectStatus;
 import com.creatorconnect.hiring.mapper.ApplicationMapper;
 import com.creatorconnect.hiring.repository.ApplicationRepository;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -179,6 +181,9 @@ class ApplicationServiceImplTest {
 
         assertThat(entity.getStatus()).isEqualTo(ApplicationStatus.ACCEPTED);
         assertThat(response.getStatus()).isEqualTo(ApplicationStatus.ACCEPTED);
+        // Accepting a freelancer must also move the project to IN_PROGRESS in
+        // the Project Service.
+        verify(projectClientService).updateProjectStatus(PROJECT_ID, ProjectStatus.IN_PROGRESS);
     }
 
     @Test
@@ -193,6 +198,26 @@ class ApplicationServiceImplTest {
                 CREATOR_ID, "CREATOR", APPLICATION_ID, statusRequest(ApplicationStatus.REJECTED));
 
         assertThat(entity.getStatus()).isEqualTo(ApplicationStatus.REJECTED);
+        // Rejecting must NOT touch the project status.
+        verify(projectClientService, never()).updateProjectStatus(any(), any());
+    }
+
+    @Test
+    void updateStatus_whenProjectStatusUpdateFails_throwsAndDoesNotSave() {
+        Application entity = application(ApplicationStatus.PENDING);
+        when(applicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.of(entity));
+        when(projectClientService.getProject(PROJECT_ID)).thenReturn(ownedProject());
+        doThrow(new ApplicationStatusConflictException(
+                "The project does not allow this status change (it is likely already completed or cancelled)"))
+                .when(projectClientService).updateProjectStatus(PROJECT_ID, ProjectStatus.IN_PROGRESS);
+
+        assertThatThrownBy(() ->
+                applicationService.updateStatus(CREATOR_ID, "CREATOR", APPLICATION_ID,
+                        statusRequest(ApplicationStatus.ACCEPTED)))
+                .isInstanceOf(ApplicationStatusConflictException.class);
+        // The project transition failed, so the application must stay PENDING
+        // (the transactional boundary rolls the save back).
+        verify(applicationRepository, never()).save(any(Application.class));
     }
 
     @Test
@@ -341,10 +366,10 @@ class ApplicationServiceImplTest {
     }
 
     private ProjectResponse ownedProject() {
-        return new ProjectResponse(PROJECT_ID, CREATOR_ID);
+        return new ProjectResponse(PROJECT_ID, CREATOR_ID, ProjectStatus.OPEN);
     }
 
     private ProjectResponse foreignProject() {
-        return new ProjectResponse(PROJECT_ID, OTHER_USER_ID);
+        return new ProjectResponse(PROJECT_ID, OTHER_USER_ID, ProjectStatus.OPEN);
     }
 }

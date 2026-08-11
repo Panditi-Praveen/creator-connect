@@ -133,7 +133,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["applications", "{{applicationId}}", "status"]
         },
-        "description": "Assigns a new status to the application (creator role required). Valid decisions: ACCEPTED or REJECTED. The application must still be PENDING.\n\nExpected: 200 OK.\nErrors: 400 invalid payload/decision · 401 · 403 not a creator · 404 application not found · 409 application no longer pending."
+        "description": "Assigns a new status to the application (creator role required). Valid decisions: ACCEPTED or REJECTED. The application must still be PENDING. Accepting an application also moves the project to IN_PROGRESS in the Project Service (the project must not be completed/cancelled, otherwise 409).\n\nExpected: 200 OK.\nErrors: 400 invalid payload/decision · 401 · 403 not a creator · 404 application or project not found · 409 application no longer pending or project cannot change state."
       },
       "response": []
     },
@@ -187,7 +187,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["reviews"]
         },
-        "description": "Submits a review for the authenticated creator. The creatorId is read from the JWT — never from the body. Fields: projectId (required), freelancerId (required), rating (required, 1-5), reviewText (optional, max 2000 chars). The freelancer must hold an ACCEPTED application on the project (be hired) and may only be reviewed once per project.\n\nExpected: 201 CREATED.\nErrors: 400 invalid payload or freelancer not hired · 401 missing/invalid JWT · 403 not a creator · 409 already reviewed on this project."
+        "description": "Submits a review for the authenticated creator. The creatorId is read from the JWT — never from the body. Fields: projectId (required), freelancerId (required), rating (required, 1-5), reviewText (optional, max 2000 chars). The freelancer must hold an ACCEPTED application on the project (be hired), and the project must be COMPLETED (set via PUT /projects/{id}/status) before it can be reviewed. A freelancer may only be reviewed once per project.\n\nExpected: 201 CREATED.\nErrors: 400 invalid payload, freelancer not hired, or project not completed · 401 missing/invalid JWT · 403 not a creator · 409 already reviewed on this project."
       },
       "response": []
     },

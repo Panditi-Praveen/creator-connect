@@ -10,6 +10,7 @@ import com.creatorconnect.hiring.exception.ReviewAccessDeniedException;
 import com.creatorconnect.hiring.exception.ReviewValidationException;
 import com.creatorconnect.hiring.feign.ProjectClientService;
 import com.creatorconnect.hiring.feign.ProjectResponse;
+import com.creatorconnect.hiring.feign.ProjectStatus;
 import com.creatorconnect.hiring.mapper.ReviewMapper;
 import com.creatorconnect.hiring.repository.ApplicationRepository;
 import com.creatorconnect.hiring.repository.ReviewRepository;
@@ -29,10 +30,12 @@ import java.util.UUID;
  *       reviews, and only on projects they own (the project's owner is
  *       fetched from the Project Service via OpenFeign); the caller's
  *       {@code userId} (from the JWT) becomes the {@code creatorId}.</li>
- *   <li><b>Hired first</b> — the freelancer must hold an {@code ACCEPTED}
- *       application on the project (verified against this service's own
- *       {@code applications} table) before they can be reviewed; otherwise the
- *       review is rejected ({@link ReviewValidationException}).</li>
+ *   <li><b>Hired first &amp; completed first</b> — the freelancer must hold
+ *       an {@code ACCEPTED} application on the project (verified against this
+ *       service's own {@code applications} table), and the project must be
+ *       {@code COMPLETED} in the Project Service, before they can be
+ *       reviewed; otherwise the review is rejected
+ *       ({@link ReviewValidationException}).</li>
  *   <li><b>One review per pair</b> — a second review for the same
  *       {@code (project, freelancer)} pair is rejected
  *       ({@link DuplicateReviewException}).</li>
@@ -91,6 +94,12 @@ public class ReviewServiceImpl implements ReviewService {
         ProjectResponse project = projectClientService.getProject(request.getProjectId());
         if (!project.getUserId().equals(creatorId)) {
             throw new ReviewAccessDeniedException("Only the project owner can review on this project");
+        }
+        // Reviews close the workflow: the project must be COMPLETED before a
+        // freelancer who was hired on it can be rated.
+        if (project.getStatus() != ProjectStatus.COMPLETED) {
+            throw new ReviewValidationException(
+                    "Only completed projects can be reviewed (current status: " + project.getStatus() + ")");
         }
         boolean hired = applicationRepository.existsByProjectIdAndFreelancerIdAndStatus(
                 request.getProjectId(), request.getFreelancerId(), ApplicationStatus.ACCEPTED);

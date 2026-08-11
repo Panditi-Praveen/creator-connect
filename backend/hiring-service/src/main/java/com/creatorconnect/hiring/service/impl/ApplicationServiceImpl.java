@@ -12,6 +12,7 @@ import com.creatorconnect.hiring.exception.ApplicationValidationException;
 import com.creatorconnect.hiring.exception.DuplicateApplicationException;
 import com.creatorconnect.hiring.feign.ProjectClientService;
 import com.creatorconnect.hiring.feign.ProjectResponse;
+import com.creatorconnect.hiring.feign.ProjectStatus;
 import com.creatorconnect.hiring.mapper.ApplicationMapper;
 import com.creatorconnect.hiring.repository.ApplicationRepository;
 import com.creatorconnect.hiring.service.ApplicationService;
@@ -38,7 +39,10 @@ import java.util.UUID;
  *       OpenFeign).</li>
  *   <li><b>Decide</b> — only {@code CREATOR}s may update status, only on
  *       their own projects, and only {@code ACCEPTED} / {@code REJECTED} are
- *       valid decisions on a {@code PENDING} application.</li>
+ *       valid decisions on a {@code PENDING} application. Accepting an
+ *       application also moves the project to {@code IN_PROGRESS} in the
+ *       Project Service (via OpenFeign) so the platform reflects that work
+ *       has started.</li>
  *   <li><b>Withdraw</b> — only the application's own freelancer may withdraw
  *       it, and only while it is {@code PENDING}.</li>
  * </ol>
@@ -140,6 +144,14 @@ public class ApplicationServiceImpl implements ApplicationService {
                     "Only pending applications can be decided on (current status: " + application.getStatus() + ")");
         }
         application.setStatus(requested);
+        if (requested == ApplicationStatus.ACCEPTED) {
+            // The creator just hired a freelancer — move the project to
+            // IN_PROGRESS so the whole platform reflects that work has
+            // started. The Project Service owns and validates its state
+            // machine (a completed/cancelled project answers 409 and rolls
+            // this transaction back, so the application stays PENDING).
+            projectClientService.updateProjectStatus(application.getProjectId(), ProjectStatus.IN_PROGRESS);
+        }
         return applicationMapper.toResponse(applicationRepository.save(application));
     }
 

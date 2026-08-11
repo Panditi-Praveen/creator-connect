@@ -12,12 +12,14 @@ import java.util.UUID;
  * payload, deserialized from {@code GET /projects/{id}}.
  *
  * <p>Only the fields the Hiring Service needs are declared — {@code id} (to
- * prove the project exists) and {@code userId} (the project owner, used for
- * creator ownership checks). Unknown fields returned by the Project Service
- * are ignored by Jackson (Spring Boot disables
- * {@code FAIL_ON_UNKNOWN_PROPERTIES} by default). This DTO is deliberately
- * independent of the Project Service module — the Hiring Service must never
- * depend on another service's classes.
+ * prove the project exists), {@code userId} (the project owner, used for
+ * creator ownership checks) and {@code status} (the project's lifecycle
+ * state, used to drive the hiring workflow: accepting an application moves a
+ * project to {@code IN_PROGRESS}, and only {@code COMPLETED} projects can be
+ * reviewed). Unknown fields returned by the Project Service are ignored by
+ * Jackson (Spring Boot disables {@code FAIL_ON_UNKNOWN_PROPERTIES} by
+ * default). This DTO is deliberately independent of the Project Service module
+ * — the Hiring Service must never depend on another service's classes.
  */
 @Getter
 @Setter
@@ -32,4 +34,9 @@ public class ProjectResponse {
      * who posted the project in the Project Service).
      */
     private UUID userId;
+
+    /**
+     * The project's current lifecycle state.
+     */
+    private ProjectStatus status;
 }

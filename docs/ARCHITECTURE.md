@@ -133,9 +133,20 @@ are fields on the profile; there are no separate Skill/Portfolio entities)
 | GET | `/projects/my` | Get my projects |
 | GET | `/projects/{id}` | Get project details |
 | PUT | `/projects/{id}` | Update project |
+| PUT | `/projects/{id}/status` | Update project status (lifecycle state machine) |
 | DELETE | `/projects/{id}` | Delete/close project |
 
 **Data:** Project entity
+
+**Project lifecycle (Day 6 follow-up):** `PUT /projects/{id}/status` moves a
+project through a forward-only state machine — `OPEN → IN_PROGRESS /
+COMPLETED / CANCELLED`, `IN_PROGRESS → COMPLETED / CANCELLED`. Re-applying
+the current status is an idempotent no-op; terminal states (`COMPLETED`,
+`CANCELLED`) are locked; illegal transitions yield `409 CONFLICT`. The same
+rules apply whenever a general update (`PUT /projects/{id}`) includes a
+`status` field, so the state machine can never be bypassed. The Hiring
+Service calls this endpoint (via OpenFeign) when a creator accepts an
+application, automatically moving the project to `IN_PROGRESS`.
 
 **Integration (Day 6):** project reads are enriched with the owner's public
 profile via the `ProfileClient` OpenFeign client (resolved through Eureka,
@@ -163,9 +174,9 @@ feed — in both cases the project is returned with `ownerProfile` omitted.
 | POST | `/hiring/applications` | Apply to project |
 | GET | `/hiring/applications/my` | Get my applications |
 | GET | `/hiring/applications/project/{projectId}` | Get applications for a project (owner only) |
-| PUT | `/hiring/applications/{id}/status` | Accept/reject an application (owner only) |
+| PUT | `/hiring/applications/{id}/status` | Accept/reject an application (owner only) — accepting moves the project to `IN_PROGRESS` |
 | DELETE | `/hiring/applications/{id}` | Withdraw application |
-| POST | `/hiring/reviews` | Submit review (project owner only) |
+| POST | `/hiring/reviews` | Submit review (project owner only — project must be `COMPLETED`) |
 | GET | `/hiring/reviews/freelancer/{freelancerId}` | Get freelancer reviews + average rating |
 
 **Data:** Application, Review entities
@@ -177,6 +188,19 @@ accepting an application, and to verify the caller owns the project before
 exposing its applications, deciding on an application, or submitting a review.
 A missing project yields `404`, a non-owner `403`, and an unreachable Project
 Service `503`.
+
+**Project lifecycle (Day 6 follow-up):** when a creator **accepts** an
+application, the service calls `PUT /projects/{id}/status` on the Project
+Service (via OpenFeign) to move the project to `IN_PROGRESS` automatically —
+so the whole platform reflects that work has started. The Project Service
+owns and validates the state machine: a `404` is translated to the Hiring
+Service's own not-found exception, a `409` (e.g. the project is already
+completed/cancelled) surfaces as `409 CONFLICT` and rolls the transaction
+back (the application stays `PENDING`), and an unreachable Project Service
+surfaces as `503`. Reviews close the workflow: submitting a review requires
+the project to be `COMPLETED` (enforced against the project's `status`
+fetched via OpenFeign) in addition to the freelancer holding an `ACCEPTED`
+application.
 
 ### AI Service (Port 8085)
 
@@ -221,10 +245,12 @@ Implemented:
   `GET /projects/my`). The caller's JWT is forwarded and the enrichment is
   best-effort — projects are returned unchanged (without `ownerProfile`) when
   the owner has no profile or the Profile Service is unavailable.
+- **Hiring Service → Project Service (status on hire):** `PUT /projects/{id}/status`
+  moves a project to `IN_PROGRESS` when the creator accepts an application,
+  and the review flow requires the project to be `COMPLETED`.
 
 Planned (not yet implemented):
 - **AI Service → Profile Service:** Fetch freelancer profiles for matching
-- **Hiring Service → Project Service:** Update project status on hire
 
 ---
 

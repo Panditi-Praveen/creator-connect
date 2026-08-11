@@ -6,6 +6,7 @@ import com.creatorconnect.project.dto.response.ProjectResponse;
 import com.creatorconnect.project.entity.ProjectStatus;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
 import com.creatorconnect.project.exception.ProjectNotFoundException;
+import com.creatorconnect.project.exception.ProjectStatusConflictException;
 import com.creatorconnect.project.feign.ProfileResponse;
 import com.creatorconnect.project.security.JwtAuthenticationEntryPoint;
 import com.creatorconnect.project.security.JwtAuthenticationFilter;
@@ -260,6 +261,94 @@ class ProjectControllerTest {
                         .content("{\"status\": \"IN_PROGRESS\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403));
+    }
+
+    @Test
+    void updateProjectStatus_byOwner_returns200() throws Exception {
+        when(projectService.updateProjectStatus(eq(OWNER_ID), eq(PROJECT_ID), eq(ProjectStatus.IN_PROGRESS)))
+                .thenReturn(projectResponse().toBuilder().status(ProjectStatus.IN_PROGRESS).build());
+
+        mockMvc.perform(put("/projects/{id}/status", PROJECT_ID)
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"IN_PROGRESS\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Project status updated successfully"))
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"));
+    }
+
+    @Test
+    void updateProjectStatus_byNonOwner_returns403() throws Exception {
+        when(projectService.updateProjectStatus(eq(OWNER_ID), eq(PROJECT_ID), any()))
+                .thenThrow(new ProjectAccessDeniedException("You do not have permission to modify this project"));
+
+        mockMvc.perform(put("/projects/{id}/status", PROJECT_ID)
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"IN_PROGRESS\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    @Test
+    void updateProjectStatus_whenMissing_returns404() throws Exception {
+        when(projectService.updateProjectStatus(eq(OWNER_ID), eq(PROJECT_ID), any()))
+                .thenThrow(new ProjectNotFoundException("Project not found: " + PROJECT_ID));
+
+        mockMvc.perform(put("/projects/{id}/status", PROJECT_ID)
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"IN_PROGRESS\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    void updateProjectStatus_whenIllegalTransition_returns409() throws Exception {
+        when(projectService.updateProjectStatus(eq(OWNER_ID), eq(PROJECT_ID), any()))
+                .thenThrow(new ProjectStatusConflictException(
+                        "Project status cannot change from COMPLETED to IN_PROGRESS"));
+
+        mockMvc.perform(put("/projects/{id}/status", PROJECT_ID)
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"IN_PROGRESS\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
+    }
+
+    @Test
+    void updateProjectStatus_withMissingStatus_returns400() throws Exception {
+        mockMvc.perform(put("/projects/{id}/status", PROJECT_ID)
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void updateProjectStatus_withMalformedUuid_returns400() throws Exception {
+        mockMvc.perform(put("/projects/not-a-uuid/status")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"IN_PROGRESS\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void updateProject_withIllegalStatusTransition_returns409() throws Exception {
+        when(projectService.updateProject(eq(OWNER_ID), eq(PROJECT_ID), any()))
+                .thenThrow(new ProjectStatusConflictException(
+                        "Project status cannot change from COMPLETED to IN_PROGRESS"));
+
+        mockMvc.perform(put("/projects/{id}", PROJECT_ID)
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"IN_PROGRESS\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
     }
 
     @Test

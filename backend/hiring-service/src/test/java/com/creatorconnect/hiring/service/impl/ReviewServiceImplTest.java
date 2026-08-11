@@ -11,6 +11,7 @@ import com.creatorconnect.hiring.exception.ReviewAccessDeniedException;
 import com.creatorconnect.hiring.exception.ReviewValidationException;
 import com.creatorconnect.hiring.feign.ProjectClientService;
 import com.creatorconnect.hiring.feign.ProjectResponse;
+import com.creatorconnect.hiring.feign.ProjectStatus;
 import com.creatorconnect.hiring.mapper.ReviewMapper;
 import com.creatorconnect.hiring.repository.ApplicationRepository;
 import com.creatorconnect.hiring.repository.ReviewRepository;
@@ -120,6 +121,17 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void createReview_whenProjectNotCompleted_throwsValidation() {
+        when(reviewRepository.existsByProjectIdAndFreelancerId(PROJECT_ID, FREELANCER_ID)).thenReturn(false);
+        when(projectClientService.getProject(PROJECT_ID)).thenReturn(openProject());
+
+        assertThatThrownBy(() -> reviewService.createReview(CREATOR_ID, "CREATOR", reviewRequest()))
+                .isInstanceOf(ReviewValidationException.class)
+                .hasMessageContaining("completed");
+        verify(reviewRepository, never()).save(any(Review.class));
+    }
+
+    @Test
     void createReview_whenFreelancerNotHired_throwsValidation() {
         when(projectClientService.getProject(PROJECT_ID)).thenReturn(ownedProject());
         when(reviewRepository.existsByProjectIdAndFreelancerId(PROJECT_ID, FREELANCER_ID)).thenReturn(false);
@@ -212,10 +224,14 @@ class ReviewServiceImplTest {
     }
 
     private ProjectResponse ownedProject() {
-        return new ProjectResponse(PROJECT_ID, CREATOR_ID);
+        return new ProjectResponse(PROJECT_ID, CREATOR_ID, ProjectStatus.COMPLETED);
+    }
+
+    private ProjectResponse openProject() {
+        return new ProjectResponse(PROJECT_ID, CREATOR_ID, ProjectStatus.OPEN);
     }
 
     private ProjectResponse foreignProject() {
-        return new ProjectResponse(PROJECT_ID, OTHER_USER_ID);
+        return new ProjectResponse(PROJECT_ID, OTHER_USER_ID, ProjectStatus.COMPLETED);
     }
 }

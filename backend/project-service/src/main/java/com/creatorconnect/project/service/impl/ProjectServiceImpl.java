@@ -5,8 +5,10 @@ import com.creatorconnect.project.dto.request.ProjectRequest;
 import com.creatorconnect.project.dto.request.UpdateProjectRequest;
 import com.creatorconnect.project.dto.response.ProjectResponse;
 import com.creatorconnect.project.entity.Project;
+import com.creatorconnect.project.entity.ProjectStatus;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
 import com.creatorconnect.project.exception.ProjectNotFoundException;
+import com.creatorconnect.project.exception.ProjectStatusConflictException;
 import com.creatorconnect.project.feign.ProfileClientService;
 import com.creatorconnect.project.feign.ProfileResponse;
 import com.creatorconnect.project.mapper.ProjectMapper;
@@ -32,7 +34,10 @@ import java.util.UUID;
  *       Service outage never fails the request.</li>
  *   <li><b>Update / Delete</b> — the caller must be the project owner; the
  *       check runs after the existence check so the API never leaks whether a
- *       project exists to non-owners ({@code 404} before {@code 403}).</li>
+ *       project exists to non-owners ({@code 404} before {@code 403}).
+ *       Updating a project that carries a new {@code status} applies the same
+ *       lifecycle state machine as the dedicated
+ *       {@link #updateProjectStatus} endpoint.</li>
  * </ol>
  *
  * <p>Dependencies are injected through the constructor only (no field
@@ -134,6 +139,15 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional
     public ProjectResponse updateProject(UUID authenticatedUserId, UUID projectId, UpdateProjectRequest request) {
         Project project = findOwnedProject(authenticatedUserId, projectId);
+        if (request.getStatus() != null && request.getStatus() != project.getStatus()
+                && !isValidTransition(project.getStatus(), request.getStatus())) {
+            // The lifecycle state machine applies wherever a status changes,
+            // not only on the dedicated /status endpoint — a completed or
+            // cancelled project must never be silently re-opened through a
+            // general update.
+            throw new ProjectStatusConflictException(
+                    "Project status cannot change from " + project.getStatus() + " to " + request.getStatus());
+        }
         projectMapper.applyUpdate(project, request);
         return projectMapper.toResponse(projectRepository.save(project));
     }
@@ -146,6 +160,50 @@ public class ProjectServiceImpl implements ProjectService {
     public void deleteProject(UUID authenticatedUserId, UUID projectId) {
         Project project = findOwnedProject(authenticatedUserId, projectId);
         projectRepository.delete(project);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
+    public ProjectResponse updateProjectStatus(UUID authenticatedUserId, UUID projectId, ProjectStatus newStatus) {
+        Project project = findOwnedProject(authenticatedUserId, projectId);
+        ProjectStatus current = project.getStatus();
+        if (newStatus == current) {
+            // Idempotent no-op — re-applying the current status (e.g. the
+            // Hiring Service accepting a second freelancer on an already
+            // in-progress project) must not fail and must not touch the row.
+            return projectMapper.toResponse(project);
+        }
+        if (!isValidTransition(current, newStatus)) {
+            throw new ProjectStatusConflictException(
+                    "Project status cannot change from " + current + " to " + newStatus);
+        }
+        project.setStatus(newStatus);
+        return projectMapper.toResponse(projectRepository.save(project));
+    }
+
+    /**
+     * Decides whether the requested transition is allowed by the project
+     * lifecycle state machine: forward-only, terminal states locked.
+     *
+     * <ul>
+     *   <li>{@code OPEN} &rarr; anything (IN_PROGRESS / COMPLETED / CANCELLED).</li>
+     *   <li>{@code IN_PROGRESS} &rarr; COMPLETED / CANCELLED only (no re-opening).</li>
+     *   <li>{@code COMPLETED} / {@code CANCELLED} &rarr; nothing (terminal).</li>
+     * </ul>
+     *
+     * @param current the project's current status
+     * @param target  the requested status (never equal to {@code current} here)
+     * @return {@code true} when the transition is legal
+     */
+    private boolean isValidTransition(ProjectStatus current, ProjectStatus target) {
+        return switch (current) {
+            case OPEN -> true;
+            case IN_PROGRESS -> target != ProjectStatus.OPEN;
+            case COMPLETED, CANCELLED -> false;
+        };
     }
 
     /**

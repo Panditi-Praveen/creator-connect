@@ -8,6 +8,7 @@ import com.creatorconnect.project.entity.Project;
 import com.creatorconnect.project.entity.ProjectStatus;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
 import com.creatorconnect.project.exception.ProjectNotFoundException;
+import com.creatorconnect.project.exception.ProjectStatusConflictException;
 import com.creatorconnect.project.feign.ProfileClientService;
 import com.creatorconnect.project.feign.ProfileResponse;
 import com.creatorconnect.project.mapper.ProjectMapper;
@@ -274,6 +275,19 @@ class ProjectServiceImplTest {
     }
 
     @Test
+    void updateProject_withIllegalStatusTransition_throwsConflict() {
+        Project entity = project(OWNER_ID);
+        entity.setStatus(ProjectStatus.COMPLETED);
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
+        UpdateProjectRequest request = updateProjectRequest(); // status IN_PROGRESS
+
+        assertThatThrownBy(() -> projectService.updateProject(OWNER_ID, PROJECT_ID, request))
+                .isInstanceOf(ProjectStatusConflictException.class)
+                .hasMessageContaining("cannot change from");
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    @Test
     void updateProject_byNonOwner_throwsAccessDenied() {
         Project entity = project(OWNER_ID);
         when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
@@ -319,6 +333,98 @@ class ProjectServiceImplTest {
         assertThatThrownBy(() -> projectService.deleteProject(OWNER_ID, PROJECT_ID))
                 .isInstanceOf(ProjectNotFoundException.class);
         verify(projectRepository, never()).delete(any(Project.class));
+    }
+
+    @Test
+    void updateProjectStatus_withValidTransition_updatesAndSaves() {
+        Project entity = project(OWNER_ID); // status OPEN
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
+        when(projectRepository.save(entity)).thenReturn(entity);
+        when(projectMapper.toResponse(entity))
+                .thenReturn(projectResponse(OWNER_ID).toBuilder().status(ProjectStatus.IN_PROGRESS).build());
+
+        ProjectResponse response =
+                projectService.updateProjectStatus(OWNER_ID, PROJECT_ID, ProjectStatus.IN_PROGRESS);
+
+        assertThat(entity.getStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
+        assertThat(response.getStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
+        verify(projectRepository).save(entity);
+    }
+
+    @Test
+    void updateProjectStatus_sameStatus_isIdempotentNoOp() {
+        Project entity = project(OWNER_ID); // status OPEN
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
+        when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
+
+        ProjectResponse response =
+                projectService.updateProjectStatus(OWNER_ID, PROJECT_ID, ProjectStatus.OPEN);
+
+        assertThat(entity.getStatus()).isEqualTo(ProjectStatus.OPEN);
+        assertThat(response.getStatus()).isEqualTo(ProjectStatus.OPEN);
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    @Test
+    void updateProjectStatus_backwardsTransition_throwsConflict() {
+        Project entity = project(OWNER_ID);
+        entity.setStatus(ProjectStatus.IN_PROGRESS);
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() ->
+                projectService.updateProjectStatus(OWNER_ID, PROJECT_ID, ProjectStatus.OPEN))
+                .isInstanceOf(ProjectStatusConflictException.class)
+                .hasMessageContaining("cannot change from");
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    @Test
+    void updateProjectStatus_fromTerminalState_throwsConflict() {
+        Project entity = project(OWNER_ID);
+        entity.setStatus(ProjectStatus.COMPLETED);
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() ->
+                projectService.updateProjectStatus(OWNER_ID, PROJECT_ID, ProjectStatus.IN_PROGRESS))
+                .isInstanceOf(ProjectStatusConflictException.class);
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    @Test
+    void updateProjectStatus_fromOpenToCompleted_isAllowed() {
+        Project entity = project(OWNER_ID); // status OPEN
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
+        when(projectRepository.save(entity)).thenReturn(entity);
+        when(projectMapper.toResponse(entity))
+                .thenReturn(projectResponse(OWNER_ID).toBuilder().status(ProjectStatus.COMPLETED).build());
+
+        ProjectResponse response =
+                projectService.updateProjectStatus(OWNER_ID, PROJECT_ID, ProjectStatus.COMPLETED);
+
+        assertThat(entity.getStatus()).isEqualTo(ProjectStatus.COMPLETED);
+        assertThat(response.getStatus()).isEqualTo(ProjectStatus.COMPLETED);
+        verify(projectRepository).save(entity);
+    }
+
+    @Test
+    void updateProjectStatus_byNonOwner_throwsAccessDenied() {
+        Project entity = project(OWNER_ID);
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() ->
+                projectService.updateProjectStatus(OTHER_USER_ID, PROJECT_ID, ProjectStatus.IN_PROGRESS))
+                .isInstanceOf(ProjectAccessDeniedException.class);
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    @Test
+    void updateProjectStatus_whenMissing_throwsProjectNotFound() {
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                projectService.updateProjectStatus(OWNER_ID, PROJECT_ID, ProjectStatus.IN_PROGRESS))
+                .isInstanceOf(ProjectNotFoundException.class);
+        verify(projectRepository, never()).save(any(Project.class));
     }
 
     private ProjectRequest projectRequest() {
