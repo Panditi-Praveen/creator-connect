@@ -6,9 +6,9 @@ spring:
     name: profile-service
 
   datasource:
-    url: jdbc:mysql://localhost:3306/creatorconnect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: root
-    password: ${MYSQL_PASSWORD:Praveen@0417}
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/creatorconnect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
@@ -45,7 +45,7 @@ eureka:
 # protected request.
 app:
   jwt:
-    secret: Y3JlYXRvcmNvbm5lY3Qtc3VwZXItc2VjcmV0LWtleS1jaGFuZ2UtbWUtYmVmb3JlLXByb2R1Y3Rpb24tMjAyNg==
+    secret: ${APP_JWT_SECRET}
     expiration-ms: 86400000
     issuer: creatorconnect-auth-service
 

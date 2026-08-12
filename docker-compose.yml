@@ -5,7 +5,7 @@ services:
     image: mysql:8.0
     container_name: creatorconnect-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
       MYSQL_DATABASE: creatorconnect
     ports:
       - "3306:3306"

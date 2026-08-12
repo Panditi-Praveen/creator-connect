@@ -65,6 +65,43 @@ creator-connect/
 └── README.md
 ```
 
+## 🔐 Environment Variables
+
+The backend services require two environment variables (no secret defaults are committed):
+
+| Variable | Required | Used by | Description |
+|---|---|---|---|
+| `APP_JWT_SECRET` | ✅ | auth, profile, project, hiring | HMAC key used to sign (auth) and validate (all) JWTs. Must be **identical** across all four services. |
+| `MYSQL_PASSWORD` | ✅ | auth, profile, project, hiring | Password for the MySQL user the services connect with. |
+| `MYSQL_USER` | — | auth, profile, project, hiring | MySQL username (defaults to `root`). |
+| `MYSQL_URL` | — | auth, profile, project, hiring | JDBC URL (defaults to `jdbc:mysql://localhost:3306/creatorconnect?...`). |
+| `MYSQL_ROOT_PASSWORD` | Docker only | `mysql` container | Root password for the MySQL container (docker-compose). |
+
+### Generating a safe JWT secret
+
+Generate a random value of at least 256 bits (32+ bytes) and base64-encode it:
+
+```bash
+openssl rand -base64 64
+# or, without openssl:
+python -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(64)).decode())"
+```
+
+### Running locally
+
+```bash
+export APP_JWT_SECRET="$(openssl rand -base64 64)"
+export MYSQL_PASSWORD="your-mysql-password"
+mvn -f backend/pom.xml spring-boot:run -pl auth-service
+```
+
+### Running with Docker Compose
+
+```bash
+cp .env.example .env    # then fill in real values — never commit .env
+docker compose up -d
+```
+
 ## 📅 10-Day Roadmap
 
 | Day | Focus |

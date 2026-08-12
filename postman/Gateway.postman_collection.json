@@ -227,7 +227,7 @@
         "header": [
           {
             "key": "Authorization",
-            "value": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJleHBpcmVkQGNyZWF0b3Jjb25uZWN0LnRlc3QiLCJ1c2VySWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJyb2xlIjoiQ1JFQVRPUiIsImlzcyI6ImNyZWF0b3Jjb25uZWN0LWF1dGgtc2VydmljZSIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDAwMDAxfQ.vpuQauGcRJgGA95V8DRBWXilIGzXMNzgxQELice2ziE",
+            "value": "Bearer INVALID_TOKEN_PLACEHOLDER_REPLACE_ME",
             "type": "text"
           }
         ],
@@ -236,7 +236,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["profile", "me"]
         },
-        "description": "A genuinely expired token: exp = 1700000001 (Nov 2023) with a valid HMAC-SHA256 signature computed with the shared dev secret and the correct issuer.\n\nExpected: 401 Unauthorized (JwtService rejects expired tokens, even though the signature is valid)."
+        "description": "A genuinely expired token: exp = 1700000001 (Nov 2023) with a valid HMAC-SHA256 signature computed with the dev secret before rotation (placeholder token - regenerate after rotating APP_JWT_SECRET) and the correct issuer.\n\nExpected: 401 Unauthorized (JwtService rejects expired tokens, even though the signature is valid)."
       },
       "response": []
     },
