@@ -76,7 +76,11 @@ public class ProjectRequest {
     private String location;
 
     /**
-     * Optional — defaults to {@code OPEN} when omitted.
+     * Optional — defaults to {@code OPEN} when omitted. Supplying any other
+     * value ({@code IN_PROGRESS}, {@code COMPLETED}, {@code CANCELLED}) is
+     * rejected with {@code 400 BAD_REQUEST}: a project is created {@code OPEN}
+     * by design and those states are only reachable through the lifecycle
+     * state machine.
      */
     private ProjectStatus status;
 

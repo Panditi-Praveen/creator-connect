@@ -90,6 +90,46 @@ class ApplicationServiceImplTest {
     }
 
     @Test
+    void apply_whenProjectCompleted_rejected() {
+        when(projectClientService.getProject(PROJECT_ID))
+                .thenReturn(projectWithStatus(ProjectStatus.COMPLETED));
+
+        assertThatThrownBy(() -> applicationService.apply(FREELANCER_ID, "FREELANCER", applicationRequest()))
+                .isInstanceOf(ApplicationValidationException.class)
+                .hasMessageContaining("COMPLETED");
+        verify(applicationRepository, never()).save(any(Application.class));
+    }
+
+    @Test
+    void apply_whenProjectCancelled_rejected() {
+        when(projectClientService.getProject(PROJECT_ID))
+                .thenReturn(projectWithStatus(ProjectStatus.CANCELLED));
+
+        assertThatThrownBy(() -> applicationService.apply(FREELANCER_ID, "FREELANCER", applicationRequest()))
+                .isInstanceOf(ApplicationValidationException.class)
+                .hasMessageContaining("CANCELLED");
+        verify(applicationRepository, never()).save(any(Application.class));
+    }
+
+    @Test
+    void apply_whenProjectInProgress_allowed() {
+        // No documented rule restricts applications to IN_PROGRESS projects,
+        // so they keep accepting them (only terminal states are closed).
+        ApplicationRequest request = applicationRequest();
+        Application entity = application(ApplicationStatus.PENDING);
+        when(projectClientService.getProject(PROJECT_ID))
+                .thenReturn(projectWithStatus(ProjectStatus.IN_PROGRESS));
+        when(applicationMapper.toEntity(FREELANCER_ID, request)).thenReturn(entity);
+        when(applicationRepository.save(entity)).thenReturn(entity);
+        when(applicationMapper.toResponse(entity)).thenReturn(applicationResponse(ApplicationStatus.PENDING));
+
+        ApplicationResponse response = applicationService.apply(FREELANCER_ID, "FREELANCER", request);
+
+        assertThat(response.getProjectId()).isEqualTo(PROJECT_ID);
+        verify(applicationRepository).save(entity);
+    }
+
+    @Test
     void apply_whenProjectMissing_throwsProjectNotFound() {
         when(projectClientService.getProject(PROJECT_ID))
                 .thenThrow(new ProjectNotFoundException("Project not found: " + PROJECT_ID));
@@ -371,5 +411,9 @@ class ApplicationServiceImplTest {
 
     private ProjectResponse foreignProject() {
         return new ProjectResponse(PROJECT_ID, OTHER_USER_ID, ProjectStatus.OPEN);
+    }
+
+    private ProjectResponse projectWithStatus(ProjectStatus status) {
+        return new ProjectResponse(PROJECT_ID, CREATOR_ID, status);
     }
 }

@@ -25,9 +25,17 @@ public interface ProjectService {
     /**
      * Creates a project owned by the given authenticated user.
      *
+     * <p>A project always starts {@code OPEN}: an omitted {@code status}
+     * defaults to {@code OPEN}, and an explicitly supplied non-{@code OPEN}
+     * status is rejected — {@code IN_PROGRESS} / {@code COMPLETED} /
+     * {@code CANCELLED} are only reachable through the lifecycle state
+     * machine.
+     *
      * @param userId  the owning user's id (from the JWT)
      * @param request the validated create payload
      * @return the persisted project projection
+     * @throws com.creatorconnect.project.exception.ProjectValidationException
+     *         when the request supplies a non-{@code OPEN} status
      */
     ProjectResponse createProject(UUID userId, ProjectRequest request);
 

@@ -7,6 +7,7 @@ import com.creatorconnect.project.entity.ProjectStatus;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
 import com.creatorconnect.project.exception.ProjectNotFoundException;
 import com.creatorconnect.project.exception.ProjectStatusConflictException;
+import com.creatorconnect.project.exception.ProjectValidationException;
 import com.creatorconnect.project.feign.ProfileResponse;
 import com.creatorconnect.project.security.JwtAuthenticationEntryPoint;
 import com.creatorconnect.project.security.JwtAuthenticationFilter;
@@ -96,6 +97,48 @@ class ProjectControllerTest {
                 .andExpect(jsonPath("$.data.title").value("YouTube Intro Package"))
                 .andExpect(jsonPath("$.data.status").value("OPEN"))
                 .andExpect(jsonPath("$.path").value("/projects"));
+    }
+
+    @Test
+    void createProject_withCompletedStatus_returns400() throws Exception {
+        when(projectService.createProject(eq(OWNER_ID), any()))
+                .thenThrow(new ProjectValidationException(
+                        "A new project must start in OPEN status (received: COMPLETED)"));
+
+        mockMvc.perform(post("/projects")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createPayloadWithStatus("COMPLETED")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void createProject_withCancelledStatus_returns400() throws Exception {
+        when(projectService.createProject(eq(OWNER_ID), any()))
+                .thenThrow(new ProjectValidationException(
+                        "A new project must start in OPEN status (received: CANCELLED)"));
+
+        mockMvc.perform(post("/projects")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createPayloadWithStatus("CANCELLED")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void createProject_withInProgressStatus_returns400() throws Exception {
+        when(projectService.createProject(eq(OWNER_ID), any()))
+                .thenThrow(new ProjectValidationException(
+                        "A new project must start in OPEN status (received: IN_PROGRESS)"));
+
+        mockMvc.perform(post("/projects")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createPayloadWithStatus("IN_PROGRESS")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
     }
 
     @Test
@@ -430,6 +473,25 @@ class ProjectControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").value("Resource not found"));
+    }
+
+    private String createPayloadWithStatus(String status) {
+        // Same payload as validCreatePayload with an explicit status field —
+        // used to exercise the create-time status validation.
+        return String.format("""
+                {
+                  "title": "YouTube Intro Package",
+                  "description": "Need a 15-second animated intro for a new YouTube channel.",
+                  "category": "Video Editing",
+                  "skillsRequired": ["After Effects", "Motion Design"],
+                  "budget": 500.00,
+                  "duration": "1 week",
+                  "experienceLevel": "Intermediate",
+                  "location": "Remote",
+                  "status": "%s",
+                  "applicationDeadline": "%s"
+                }
+                """, status, LocalDate.now().plusDays(30));
     }
 
     private String validCreatePayload() {

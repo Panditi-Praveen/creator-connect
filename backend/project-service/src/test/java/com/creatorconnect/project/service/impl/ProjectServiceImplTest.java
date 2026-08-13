@@ -9,6 +9,7 @@ import com.creatorconnect.project.entity.ProjectStatus;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
 import com.creatorconnect.project.exception.ProjectNotFoundException;
 import com.creatorconnect.project.exception.ProjectStatusConflictException;
+import com.creatorconnect.project.exception.ProjectValidationException;
 import com.creatorconnect.project.feign.ProfileClientService;
 import com.creatorconnect.project.feign.ProfileResponse;
 import com.creatorconnect.project.mapper.ProjectMapper;
@@ -69,6 +70,60 @@ class ProjectServiceImplTest {
         assertThat(response.getUserId()).isEqualTo(OWNER_ID);
         assertThat(response.getTitle()).isEqualTo("YouTube Intro Package");
         verify(projectRepository).save(entity);
+    }
+
+    @Test
+    void createProject_defaultsToOpen_whenStatusOmitted() {
+        ProjectRequest request = projectRequest(); // no status supplied
+        Project entity = project(OWNER_ID); // status OPEN
+        when(projectMapper.toEntity(OWNER_ID, request)).thenReturn(entity);
+        when(projectRepository.save(entity)).thenReturn(entity);
+        when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
+
+        ProjectResponse response = projectService.createProject(OWNER_ID, request);
+
+        // An omitted status must not be rejected — the entity (and mapper)
+        // default it to OPEN.
+        assertThat(response.getStatus()).isEqualTo(ProjectStatus.OPEN);
+        verify(projectRepository).save(entity);
+    }
+
+    @Test
+    void createProject_withOpenStatus_allowed() {
+        ProjectRequest request = projectRequest(ProjectStatus.OPEN);
+        Project entity = project(OWNER_ID);
+        when(projectMapper.toEntity(OWNER_ID, request)).thenReturn(entity);
+        when(projectRepository.save(entity)).thenReturn(entity);
+        when(projectMapper.toResponse(entity)).thenReturn(projectResponse(OWNER_ID));
+
+        ProjectResponse response = projectService.createProject(OWNER_ID, request);
+
+        assertThat(response.getStatus()).isEqualTo(ProjectStatus.OPEN);
+        verify(projectRepository).save(entity);
+    }
+
+    @Test
+    void createProject_withCompletedStatus_rejected() {
+        assertThatThrownBy(() -> projectService.createProject(OWNER_ID, projectRequest(ProjectStatus.COMPLETED)))
+                .isInstanceOf(ProjectValidationException.class)
+                .hasMessageContaining("OPEN");
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    @Test
+    void createProject_withCancelledStatus_rejected() {
+        assertThatThrownBy(() -> projectService.createProject(OWNER_ID, projectRequest(ProjectStatus.CANCELLED)))
+                .isInstanceOf(ProjectValidationException.class)
+                .hasMessageContaining("OPEN");
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    @Test
+    void createProject_withInProgressStatus_rejected() {
+        assertThatThrownBy(() -> projectService.createProject(OWNER_ID, projectRequest(ProjectStatus.IN_PROGRESS)))
+                .isInstanceOf(ProjectValidationException.class)
+                .hasMessageContaining("OPEN");
+        verify(projectRepository, never()).save(any(Project.class));
     }
 
     @Test
@@ -428,6 +483,10 @@ class ProjectServiceImplTest {
     }
 
     private ProjectRequest projectRequest() {
+        return projectRequest(null);
+    }
+
+    private ProjectRequest projectRequest(ProjectStatus status) {
         return ProjectRequest.builder()
                 .title("YouTube Intro Package")
                 .description("Need a 15-second animated intro for a new YouTube channel.")
@@ -437,6 +496,7 @@ class ProjectServiceImplTest {
                 .duration("1 week")
                 .experienceLevel("Intermediate")
                 .location("Remote")
+                .status(status)
                 .applicationDeadline(LocalDate.now().plusDays(30))
                 .build();
     }

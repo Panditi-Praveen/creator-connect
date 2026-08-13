@@ -32,7 +32,9 @@ import java.util.UUID;
  *       {@code userId} (from the JWT) becomes the {@code freelancerId}; a
  *       second application for the same project is rejected
  *       ({@link DuplicateApplicationException}). The project must exist in
- *       the Project Service (verified via OpenFeign).</li>
+ *       the Project Service (verified via OpenFeign), and terminal projects
+ *       ({@code COMPLETED} / {@code CANCELLED}) cannot receive new
+ *       applications ({@link ApplicationValidationException}).</li>
  *   <li><b>View</b> — a freelancer sees only their own applications; a
  *       {@code CREATOR} sees a project's applications only if they own the
  *       project (owner data is fetched from the Project Service via
@@ -92,7 +94,14 @@ public class ApplicationServiceImpl implements ApplicationService {
         // Verify the project exists in the Project Service before accepting
         // the application (404 when it does not). Kept after the local
         // duplicate check so repeat applicants never pay the network call.
-        projectClientService.getProject(request.getProjectId());
+        ProjectResponse project = projectClientService.getProject(request.getProjectId());
+        // Terminal projects are closed to new applications (documented rule:
+        // "Closed or completed projects cannot receive new applications").
+        // OPEN and IN_PROGRESS projects keep accepting them.
+        if (project.getStatus() == ProjectStatus.COMPLETED || project.getStatus() == ProjectStatus.CANCELLED) {
+            throw new ApplicationValidationException(
+                    "Cannot apply to a " + project.getStatus() + " project");
+        }
         Application application = applicationRepository.save(
                 applicationMapper.toEntity(freelancerId, request));
         return applicationMapper.toResponse(application);

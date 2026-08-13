@@ -9,6 +9,7 @@ import com.creatorconnect.project.entity.ProjectStatus;
 import com.creatorconnect.project.exception.ProjectAccessDeniedException;
 import com.creatorconnect.project.exception.ProjectNotFoundException;
 import com.creatorconnect.project.exception.ProjectStatusConflictException;
+import com.creatorconnect.project.exception.ProjectValidationException;
 import com.creatorconnect.project.feign.ProfileClientService;
 import com.creatorconnect.project.feign.ProfileResponse;
 import com.creatorconnect.project.mapper.ProjectMapper;
@@ -26,7 +27,12 @@ import java.util.UUID;
  * <p>Owns the project lifecycle with these rules:
  * <ol>
  *   <li><b>Create</b> — the caller's {@code userId} (from the JWT) becomes the
- *       project owner.</li>
+ *       project owner. A project always starts {@code OPEN}: an omitted
+ *       {@code status} defaults to {@code OPEN}, and an explicitly supplied
+ *       non-{@code OPEN} status ({@code IN_PROGRESS} / {@code COMPLETED} /
+ *       {@code CANCELLED}) is rejected with
+ *       {@link ProjectValidationException} — those states are only reachable
+ *       through the lifecycle state machine.</li>
  *   <li><b>Get / Browse</b> — any authenticated user may view any project;
  *       missing projects yield {@link ProjectNotFoundException}. Reads also
  *       attach the owner's public profile ({@code ownerProfile}) fetched from
@@ -73,6 +79,15 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     @Transactional
     public ProjectResponse createProject(UUID userId, ProjectRequest request) {
+        if (request.getStatus() != null && request.getStatus() != ProjectStatus.OPEN) {
+            // A project is created OPEN by design and moves through the
+            // lifecycle state machine afterwards. Creating it directly in
+            // IN_PROGRESS / COMPLETED / CANCELLED would bypass the machine
+            // (e.g. a brand-new project with a terminal state), so it is
+            // rejected here — the only valid supplied status is OPEN.
+            throw new ProjectValidationException(
+                    "A new project must start in OPEN status (received: " + request.getStatus() + ")");
+        }
         Project project = projectRepository.save(projectMapper.toEntity(userId, request));
         return projectMapper.toResponse(project);
     }

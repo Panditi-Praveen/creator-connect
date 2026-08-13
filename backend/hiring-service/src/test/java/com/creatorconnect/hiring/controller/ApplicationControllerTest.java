@@ -161,6 +161,32 @@ class ApplicationControllerTest {
     }
 
     @Test
+    void apply_whenProjectCompleted_returns400() throws Exception {
+        when(applicationService.apply(eq(FREELANCER_ID), eq("FREELANCER"), any()))
+                .thenThrow(new ApplicationValidationException("Cannot apply to a COMPLETED project"));
+
+        mockMvc.perform(post("/applications")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validApplyPayload()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void apply_whenProjectCancelled_returns400() throws Exception {
+        when(applicationService.apply(eq(FREELANCER_ID), eq("FREELANCER"), any()))
+                .thenThrow(new ApplicationValidationException("Cannot apply to a CANCELLED project"));
+
+        mockMvc.perform(post("/applications")
+                        .header("Authorization", "Bearer valid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validApplyPayload()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
     void apply_whenProjectServiceUnavailable_returns503() throws Exception {
         when(applicationService.apply(eq(FREELANCER_ID), eq("FREELANCER"), any()))
                 .thenThrow(feignException());

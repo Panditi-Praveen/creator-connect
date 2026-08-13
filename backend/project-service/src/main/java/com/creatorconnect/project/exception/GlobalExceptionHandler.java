@@ -29,6 +29,9 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>{@link ProjectNotFoundException} &rarr; {@code 404 NOT_FOUND}.</li>
  *   <li>{@link ProjectAccessDeniedException} &rarr; {@code 403 FORBIDDEN}.</li>
+ *   <li>{@link ProjectValidationException} &rarr; {@code 400 BAD_REQUEST}
+ *       for business rules Bean Validation cannot express (e.g. creating a
+ *       project directly in a non-{@code OPEN} state).</li>
  *   <li>{@link MethodArgumentNotValidException} &rarr; {@code 400 BAD_REQUEST}
  *       with the collected field-level validation errors.</li>
  *   <li>{@link HttpMessageNotReadableException} &amp; type mismatches &rarr;
@@ -83,6 +86,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleProjectStatusConflict(ProjectStatusConflictException ex,
                                                                      HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    /**
+     * Handles requests that violate a business rule Bean Validation cannot
+     * express (e.g. creating a project directly in a terminal or
+     * in-progress state — a project must start {@code OPEN}).
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 400 BAD_REQUEST} with the exception message
+     */
+    @ExceptionHandler(ProjectValidationException.class)
+    public ResponseEntity<ErrorResponse> handleProjectValidation(ProjectValidationException ex,
+                                                                 HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
     /**

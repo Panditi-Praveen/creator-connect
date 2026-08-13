@@ -26,7 +26,9 @@ public interface ApplicationService {
      * Applies the given freelancer to the project in the request.
      *
      * <p>The project must exist in the Project Service (verified via
-     * OpenFeign); otherwise the application is rejected.
+     * OpenFeign); otherwise the application is rejected. Terminal projects
+     * ({@code COMPLETED} / {@code CANCELLED}) cannot receive new
+     * applications.
      *
      * @param freelancerId the applying freelancer's id (from the JWT)
      * @param role         the caller's role from the JWT
@@ -38,6 +40,9 @@ public interface ApplicationService {
      *         when the project does not exist in the Project Service
      * @throws com.creatorconnect.hiring.exception.DuplicateApplicationException
      *         when the freelancer already applied to the project
+     * @throws com.creatorconnect.hiring.exception.ApplicationValidationException
+     *         when the project is in a terminal state ({@code COMPLETED} or
+     *         {@code CANCELLED})
      */
     ApplicationResponse apply(UUID freelancerId, String role, ApplicationRequest request);
 
