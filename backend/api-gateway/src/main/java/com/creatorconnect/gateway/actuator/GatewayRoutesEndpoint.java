@@ -62,7 +62,7 @@ public class GatewayRoutesEndpoint {
      * @param gatewayMvcProperties the gateway's bound configuration properties
      */
     public GatewayRoutesEndpoint(ObjectProvider<GatewayMvcProperties> gatewayMvcProperties) {
-        this.gatewayMvcProperties = gatewayMvcProperties;
+        this.gatewayMvcProperties =gatewayMvcProperties;
     }
 
     /**
