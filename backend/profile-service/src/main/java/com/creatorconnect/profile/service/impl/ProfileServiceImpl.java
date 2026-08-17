@@ -13,6 +13,7 @@ import com.creatorconnect.profile.service.ProfileService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -72,6 +73,17 @@ public class ProfileServiceImpl implements ProfileService {
         return profileRepository.findByUserId(userId)
                 .map(profileMapper::toResponse)
                 .orElseThrow(() -> new ProfileNotFoundException("Profile not found for user: " + userId));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProfileResponse> getFreelancerProfiles() {
+        return profileRepository.findAll().stream()
+                .map(profileMapper::toResponse)
+                .toList();
     }
 
     /**

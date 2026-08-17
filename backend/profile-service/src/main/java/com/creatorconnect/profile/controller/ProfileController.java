@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -130,6 +131,42 @@ public class ProfileController {
                 HttpStatus.OK.value(),
                 "Profile retrieved successfully",
                 profile,
+                httpRequest.getRequestURI()
+        ));
+    }
+
+    /**
+     * Returns every profile in the platform (the unified creator/freelancer
+     * talent pool).
+     *
+     * <p>Read-only helper used by the AI Service for talent discovery. The
+     * Profile Service keeps one unified model for creators and freelancers
+     * (there is no role column), so this returns all profiles — consumers that
+     * need role-based filtering must join with Auth Service role data.
+     *
+     * @param httpRequest the raw request (used to echo the request path)
+     * @return {@code 200 OK} with the list of all profiles
+     */
+    @GetMapping("/freelancers")
+    @Operation(
+            summary = "List all profiles (talent pool)",
+            description = "Returns all profiles in the unified creator/freelancer model. Used by the AI "
+                    + "Service for talent discovery. Any authenticated caller may list profiles."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "Profiles retrieved"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "Missing or invalid JWT")
+    })
+    public ResponseEntity<ApiResponse<List<ProfileResponse>>> getFreelancerProfiles(
+            HttpServletRequest httpRequest) {
+
+        List<ProfileResponse> profiles = profileService.getFreelancerProfiles();
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(),
+                "Profiles retrieved successfully",
+                profiles,
                 httpRequest.getRequestURI()
         ));
     }

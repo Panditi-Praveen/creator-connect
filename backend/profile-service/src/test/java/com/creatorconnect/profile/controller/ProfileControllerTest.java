@@ -1,6 +1,7 @@
 package com.creatorconnect.profile.controller;
 
 import com.creatorconnect.profile.config.SecurityBeansConfig;
+import com.creatorconnect.profile.dto.response.ProfileResponse;
 import com.creatorconnect.profile.security.JwtAuthenticationEntryPoint;
 import com.creatorconnect.profile.security.JwtAuthenticationFilter;
 import com.creatorconnect.profile.security.JwtService;
@@ -18,6 +19,7 @@ import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.anyString;
@@ -60,6 +62,25 @@ class ProfileControllerTest {
         when(jwtService.extractUserId(anyString())).thenReturn(USER_ID);
         when(jwtService.extractUsername(anyString())).thenReturn("praveen@gmail.com");
         when(jwtService.extractRole(anyString())).thenReturn("FREELANCER");
+    }
+
+    @Test
+    void listProfiles_returnsAllProfiles() throws Exception {
+        ProfileResponse profile = ProfileResponse.builder()
+                .id(UUID.randomUUID())
+                .userId(USER_ID)
+                .firstName("Praveen")
+                .lastName("Panditi")
+                .skills("Java, Spring Boot")
+                .build();
+        when(profileService.getFreelancerProfiles()).thenReturn(List.of(profile));
+
+        mockMvc.perform(get("/profile/freelancers").header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.message").value("Profiles retrieved successfully"))
+                .andExpect(jsonPath("$.data[0].firstName").value("Praveen"))
+                .andExpect(jsonPath("$.data[0].skills").value("Java, Spring Boot"));
     }
 
     @Test

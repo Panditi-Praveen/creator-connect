@@ -20,6 +20,7 @@
         <module>profile-service</module>
         <module>project-service</module>
         <module>hiring-service</module>
+        <module>ai-service</module>
     </modules>
 
     <!-- Spring Boot Parent -->

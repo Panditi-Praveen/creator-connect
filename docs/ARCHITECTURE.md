@@ -109,6 +109,7 @@ shares the same HMAC signing secret and validates the issuer claim.)
 | POST | `/profile` | Create my profile |
 | GET | `/profile/me` | Get my profile |
 | GET | `/profile/{userId}` | Get any user's profile |
+| GET | `/profile/freelancers` | List all profiles (unified talent pool — used by AI discovery) |
 | PUT | `/profile/{userId}` | Update profile (owner only) |
 | DELETE | `/profile/{userId}` | Delete profile (owner only) |
 
@@ -208,16 +209,35 @@ application.
 
 **Responsibilities:**
 - Accept natural language queries
-- Interpret queries via LLM API
-- Extract structured search criteria
-- Match against real freelancer profiles
-- Rank results by relevance
+- Interpret queries via an external LLM API (OpenAI-compatible chat completions)
+- Match against real freelancer profiles (fetched from the Profile Service)
+- Rank results by relevance (LLM-assisted scoring)
 
-**API Endpoints (planned — the AI service is not implemented yet):**
+**API Endpoints:**
 | Method | Path | Description |
 |---|---|---|
-| POST | `/ai/discover` | Natural language talent search |
-| GET | `/ai/status` | AI service health check |
+| POST | `/ai/discover` | Natural language talent search (JWT required) |
+| GET | `/ai/status` | AI service health check (public) |
+
+**Request/response contract (`POST /ai/discover`):**
+- Request: `{ "query": "<natural language hiring request>" }` (required, ≤ 500 chars)
+- Response (wrapped in the standard `ApiResponse` envelope):
+  `{ "query": "...", "count": n, "results": [ { "profileId", "userId", "name", "headline", "skills", "location", "availableForHire", "score", "reason" } ] }`
+- `score` is the LLM-computed relevance in `[0.0, 1.0]`; `skills` is the
+  profile's stored string (comma-separated by convention of the Profile Service).
+
+**Behavior and error handling:**
+- The gateway forwards `/ai/**` unchanged (no `rewritePath` filter on the AI
+  route), so the internal controller paths are `/ai/discover` and `/ai/status`.
+- `/ai/discover` requires a valid JWT (same shared-secret validation as the
+  sibling services); the caller's token is forwarded to the Profile Service on
+  the Feign call. `/ai/status` and `/actuator/**` are public.
+- The LLM is configured via `OPENAI_API_KEY` (required), `OPENAI_MODEL`
+  (default `gpt-4o-mini`) and `OPENAI_BASE_URL` (optional override). The key is
+  never logged or exposed.
+- Missing `OPENAI_API_KEY` → `503` with a clear configuration message (no fake
+  responses). LLM provider/parse failure → `502`. Profile Service outage → `503`.
+- Empty talent pool → `200` with an empty `results` list (no LLM call).
 
 **Data:** Interfaces with Profile Service for freelancer data; no own entities.
 
@@ -249,8 +269,9 @@ Implemented:
   moves a project to `IN_PROGRESS` when the creator accepts an application,
   and the review flow requires the project to be `COMPLETED`.
 
-Planned (not yet implemented):
-- **AI Service → Profile Service:** Fetch freelancer profiles for matching
+Implemented:
+- **AI Service → Profile Service:** Fetch the freelancer profile pool for
+  talent discovery (`GET /profile/freelancers`)
 
 ---
 

@@ -4,6 +4,7 @@ import com.creatorconnect.profile.dto.request.ProfileRequest;
 import com.creatorconnect.profile.dto.request.UpdateProfileRequest;
 import com.creatorconnect.profile.dto.response.ProfileResponse;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -40,6 +41,16 @@ public interface ProfileService {
      *         when the user has no profile
      */
     ProfileResponse getProfileByUserId(UUID userId);
+
+    /**
+     * Loads every profile in the platform (the unified creator/freelancer
+     * talent pool).
+     *
+     * <p>Read-only helper used by the AI Service for talent discovery.
+     *
+     * @return all profiles as response projections
+     */
+    List<ProfileResponse> getFreelancerProfiles();
 
     /**
      * Updates the profile of the given target user.
