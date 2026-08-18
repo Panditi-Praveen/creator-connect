@@ -7,8 +7,15 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation()
 
   if (!isAuthenticated) {
-    // Remember where the user was headed so login can send them back.
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    // Remember where the user was headed (including query string, e.g.
+    // /projects?keyword=...) so login can send them back after signing in.
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location.pathname + location.search }}
+      />
+    )
   }
 
   return children

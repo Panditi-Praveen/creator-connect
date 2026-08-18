@@ -21,6 +21,22 @@ spring:
     open-in-view: false
     show-sql: false
 
+  # SMTP — required by spring-boot-starter-mail when app.email.enabled=true.
+  # Values are read from environment variables; never hardcode credentials.
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_STARTTLS:true}
+          connectiontimeout: 5000
+          timeout: 5000
+
   jackson:
     default-property-inclusion: non_null
     serialization:
@@ -57,6 +73,14 @@ app:
     secret: ${APP_JWT_SECRET}
     expiration-ms: 86400000
     issuer: creatorconnect-auth-service
+
+  # Transactional email — fire-and-forget.  When enabled=false (the default)
+  # the EmailService logs and silently skips every send, so development and
+  # test environments never need real SMTP credentials.
+  email:
+    enabled: ${MAIL_ENABLED:false}
+    from-address: ${MAIL_FROM_ADDRESS:noreply@creatorconnect.app}
+    from-name: ${MAIL_FROM_NAME:CreatorConnect}
 
 management:
   endpoints:

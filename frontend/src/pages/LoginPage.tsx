@@ -37,8 +37,13 @@ export default function LoginPage() {
   return (
     <main className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1>CreatorConnect</h1>
-        <h2>Sign in</h2>
+        <div className="auth-brand">
+          <span className="brand-mark" aria-hidden="true">
+            CC
+          </span>
+          <h1>CreatorConnect</h1>
+        </div>
+        <h2>Welcome back — sign in to continue</h2>
 
         {justRegistered && (
           <p className="form-success" role="status">

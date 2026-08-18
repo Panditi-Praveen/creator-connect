@@ -83,10 +83,15 @@ http.interceptors.response.use(
       if (body && typeof body.message === 'string') {
         return Promise.reject(new ApiError(body))
       }
+
+      // HTTP response received but without a usable ErrorResponse body (e.g.
+      // a gateway/proxy HTML error page, or JSON without a string `message`):
+      // classify by status code — never by the generic connection message.
+      return Promise.reject(new ApiError(buildFallbackError(error)))
     }
 
-    // No usable body (network failure, gateway down, proxy error): fall back
-    // to the documented frontend fallback messages.
+    // No HTTP response at all (network down, CORS block, timeout, aborted):
+    // only this case is a genuine connection failure.
     return Promise.reject(new ApiError(buildFallbackError(error)))
   },
 )
@@ -98,6 +103,10 @@ const FALLBACK_MESSAGES: Record<number, string> = {
   404: 'The requested resource was not found.',
   409: 'This action conflicts with an existing record.',
   500: 'Something went wrong on the server. Please try again.',
+  // 502 covers the AI Service's documented LLM-failure contract (OpenAI
+  // quota/availability) and any other upstream failure. Pages may override
+  // with more specific copy (see AiDiscoveryPage).
+  502: 'The service is temporarily unavailable. Please try again later.',
   503: 'Service temporarily unavailable. Please try again later.',
 }
 
@@ -133,6 +142,11 @@ export async function put<T>(url: string, body?: unknown): Promise<T> {
 
 export async function del<T>(url: string): Promise<T> {
   const response = await http.delete<T>(url)
+  return response.data
+}
+
+export async function patch<T>(url: string, body?: unknown): Promise<T> {
+  const response = await http.patch<T>(url, body)
   return response.data
 }
 

@@ -4,6 +4,7 @@ import com.creatorconnect.hiring.dto.request.ReviewRequest;
 import com.creatorconnect.hiring.dto.response.FreelancerReviewsResponse;
 import com.creatorconnect.hiring.dto.response.ReviewResponse;
 import com.creatorconnect.hiring.entity.ApplicationStatus;
+import com.creatorconnect.hiring.entity.NotificationType;
 import com.creatorconnect.hiring.entity.Review;
 import com.creatorconnect.hiring.exception.DuplicateReviewException;
 import com.creatorconnect.hiring.exception.ReviewAccessDeniedException;
@@ -14,7 +15,10 @@ import com.creatorconnect.hiring.feign.ProjectStatus;
 import com.creatorconnect.hiring.mapper.ReviewMapper;
 import com.creatorconnect.hiring.repository.ApplicationRepository;
 import com.creatorconnect.hiring.repository.ReviewRepository;
+import com.creatorconnect.hiring.service.NotificationService;
 import com.creatorconnect.hiring.service.ReviewService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,10 +56,13 @@ public class ReviewServiceImpl implements ReviewService {
 
     private static final String ROLE_CREATOR = "CREATOR";
 
+    private static final Logger log = LoggerFactory.getLogger(ReviewServiceImpl.class);
+
     private final ReviewRepository reviewRepository;
     private final ApplicationRepository applicationRepository;
     private final ReviewMapper reviewMapper;
     private final ProjectClientService projectClientService;
+    private final NotificationService notificationService;
 
     /**
      * Creates the service with its collaborators.
@@ -66,15 +73,18 @@ public class ReviewServiceImpl implements ReviewService {
      * @param reviewMapper           the entity/DTO mapper
      * @param projectClientService   the Project Service client used to verify
      *                               the creator owns the project
+     * @param notificationService    the notification service for in-app events
      */
     public ReviewServiceImpl(ReviewRepository reviewRepository,
                              ApplicationRepository applicationRepository,
                              ReviewMapper reviewMapper,
-                             ProjectClientService projectClientService) {
+                             ProjectClientService projectClientService,
+                             NotificationService notificationService) {
         this.reviewRepository = reviewRepository;
         this.applicationRepository = applicationRepository;
         this.reviewMapper = reviewMapper;
         this.projectClientService = projectClientService;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -109,7 +119,26 @@ public class ReviewServiceImpl implements ReviewService {
         }
         Review review = reviewRepository.save(
                 reviewMapper.toEntity(creatorId, request));
+        // Notify the freelancer that a review was submitted.
+        notifyReviewReceived(request.getFreelancerId(), review.getId(), request.getProjectId());
         return reviewMapper.toResponse(review);
+    }
+
+    // ---- Notification helper (fire-and-forget) ----
+
+    private void notifyReviewReceived(UUID freelancerId, UUID reviewId, UUID projectId) {
+        try {
+            notificationService.create(
+                    freelancerId,
+                    NotificationType.REVIEW_RECEIVED,
+                    "New review received",
+                    "A creator has left a review for you.",
+                    reviewId,
+                    "REVIEW"
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to create REVIEW_RECEIVED notification: {}", ex.getMessage());
+        }
     }
 
     /**

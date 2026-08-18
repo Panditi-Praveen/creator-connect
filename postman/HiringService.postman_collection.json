@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "CreatorConnect - Hiring Service",
-    "description": "Hiring Service APIs — freelancers apply to projects, creators manage and decide on applications, then review the freelancers they hired.\n\nBase URL: http://localhost:8084 (direct).\n\nSetup:\n1. Register + login via the Auth Service to obtain JWTs for a FREELANCER and a CREATOR.\n2. Paste the freelancer's token into the collection variable `freelancerToken` and the creator's token into `creatorToken`.\n3. After creating a project (Project Service), copy its `id` into the collection variable `projectId`.\n4. After applying, copy the application `id` from the response into the collection variable `applicationId`.\n5. Copy the freelancer's user `id` (the userId claim / freelancerId from an application response) into `freelancerId` — reviews are submitted against it.\n\nEndpoints:\n- POST   /applications                     Apply to project (freelancer only — 409 if already applied)\n- GET    /applications/my                  Get my applications (paginated: page, size)\n- GET    /applications/project/{projectId} Get applications for project (creator only)\n- PUT    /applications/{id}/status         Accept/reject application (creator only)\n- DELETE /applications/{id}                Withdraw application (own application only)\n- POST   /reviews                          Submit review for hired freelancer (creator only)\n- GET    /reviews/freelancer/{freelancerId} Get freelancer reviews + average rating",
+    "description": "Hiring Service APIs — freelancers apply to projects, creators manage and decide on applications, then review the freelancers they hired.\n\nBase URL: http://localhost:8084 (direct).\n\nSetup:\n1. Register + login via the Auth Service to obtain JWTs for a FREELANCER and a CREATOR.\n2. Paste the freelancer's token into the collection variable `freelancerToken` and the creator's token into `creatorToken`.\n3. After creating a project (Project Service), copy its `id` into the collection variable `projectId`.\n4. After applying, copy the application `id` from the response into the collection variable `applicationId`.\n5. Copy the freelancer's user `id` (the userId claim / freelancerId from an application response) into `freelancerId` — reviews are submitted against it.\n6. After triggering a notification (e.g. apply / accept), copy the notification `id` from the list response into `notificationId`.\n\nEndpoints:\n- POST   /applications                     Apply to project (freelancer only — 409 if already applied)\n- GET    /applications/my                  Get my applications (paginated: page, size)\n- GET    /applications/project/{projectId} Get applications for project (creator only)\n- PUT    /applications/{id}/status         Accept/reject application (creator only)\n- DELETE /applications/{id}                Withdraw application (own application only)\n- POST   /reviews                          Submit review for hired freelancer (creator only)\n- GET    /reviews/freelancer/{freelancerId} Get freelancer reviews + average rating\n- GET    /notifications                    List notifications (newest first, paginated)\n- GET    /notifications?unreadOnly=true    List unread notifications only\n- GET    /notifications/unread-count       Get count of unread notifications\n- PATCH  /notifications/{id}/read          Mark a single notification as read\n- PATCH  /notifications/read-all           Mark all notifications as read",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -212,6 +212,135 @@
       "response": []
     },
     {
+      "name": "List Notifications",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{freelancerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/notifications?page=0&size=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications"],
+          "query": [
+            {
+              "key": "page",
+              "value": "0",
+              "description": "Zero-based page index. Optional (default 0)."
+            },
+            {
+              "key": "size",
+              "value": "20",
+              "description": "Page size. Optional (default 20)."
+            }
+          ]
+        },
+        "description": "Returns the authenticated user's notifications, newest first, paginated. The page object is carried in data.content.\n\nExpected: 200 OK.\nErrors: 401 missing/invalid JWT."
+      },
+      "response": []
+    },
+    {
+      "name": "List Unread Notifications",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{freelancerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/notifications?unreadOnly=true&page=0&size=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications"],
+          "query": [
+            {
+              "key": "unreadOnly",
+              "value": "true",
+              "description": "Filter to unread notifications only."
+            },
+            {
+              "key": "page",
+              "value": "0",
+              "description": "Zero-based page index."
+            },
+            {
+              "key": "size",
+              "value": "20",
+              "description": "Page size."
+            }
+          ]
+        },
+        "description": "Returns only unread notifications for the authenticated user.\n\nExpected: 200 OK.\nErrors: 401 missing/invalid JWT."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Unread Notification Count",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{freelancerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/notifications/unread-count",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications", "unread-count"]
+        },
+        "description": "Returns the count of unread notifications for the authenticated user.\n\nExpected: 200 OK with numeric data.\nErrors: 401 missing/invalid JWT."
+      },
+      "response": []
+    },
+    {
+      "name": "Mark Notification as Read",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{freelancerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/notifications/{{notificationId}}/read",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications", "{{notificationId}}", "read"]
+        },
+        "description": "Marks a single notification as read. Only the notification's recipient may perform this action. Set `notificationId` from a list response.\n\nExpected: 200 OK.\nErrors: 401 missing/invalid JWT · 404 notification not found or not owned by caller."
+      },
+      "response": []
+    },
+    {
+      "name": "Mark All Notifications as Read",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{freelancerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/notifications/read-all",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications", "read-all"]
+        },
+        "description": "Marks all of the authenticated user's unread notifications as read.\n\nExpected: 200 OK with numeric data (count of updated rows).\nErrors: 401 missing/invalid JWT."
+      },
+      "response": []
+    },
+    {
       "name": "Security - Missing Token (expect 401)",
       "request": {
         "method": "GET",
@@ -241,6 +370,19 @@
           "path": ["applications", "project", "{{projectId}}"]
         },
         "description": "A freelancer tries to read a project's incoming applications.\n\nExpected: 403 Forbidden — only creators may view applications for a project."
+      },
+      "response": []
+    },
+    {
+      "name": "Security - Notifications Without JWT (expect 401)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/notifications",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications"]
+        },
+        "description": "No Authorization header.\n\nExpected: 401 Unauthorized."
       },
       "response": []
     }
@@ -273,6 +415,11 @@
     },
     {
       "key": "freelancerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notificationId",
       "value": "",
       "type": "string"
     }

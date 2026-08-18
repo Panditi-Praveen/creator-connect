@@ -5,17 +5,24 @@ import com.creatorconnect.hiring.dto.request.UpdateApplicationStatusRequest;
 import com.creatorconnect.hiring.dto.response.ApplicationResponse;
 import com.creatorconnect.hiring.entity.Application;
 import com.creatorconnect.hiring.entity.ApplicationStatus;
+import com.creatorconnect.hiring.entity.NotificationType;
 import com.creatorconnect.hiring.exception.ApplicationAccessDeniedException;
 import com.creatorconnect.hiring.exception.ApplicationNotFoundException;
 import com.creatorconnect.hiring.exception.ApplicationStatusConflictException;
 import com.creatorconnect.hiring.exception.ApplicationValidationException;
 import com.creatorconnect.hiring.exception.DuplicateApplicationException;
+import com.creatorconnect.hiring.feign.AuthClient;
 import com.creatorconnect.hiring.feign.ProjectClientService;
 import com.creatorconnect.hiring.feign.ProjectResponse;
 import com.creatorconnect.hiring.feign.ProjectStatus;
+import com.creatorconnect.hiring.feign.UserInfoResponse;
 import com.creatorconnect.hiring.mapper.ApplicationMapper;
 import com.creatorconnect.hiring.repository.ApplicationRepository;
 import com.creatorconnect.hiring.service.ApplicationService;
+import com.creatorconnect.hiring.service.EmailService;
+import com.creatorconnect.hiring.service.NotificationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -56,12 +63,17 @@ import java.util.UUID;
 @Service
 public class ApplicationServiceImpl implements ApplicationService {
 
+    private static final Logger log = LoggerFactory.getLogger(ApplicationServiceImpl.class);
+
     private static final String ROLE_FREELANCER = "FREELANCER";
     private static final String ROLE_CREATOR = "CREATOR";
 
     private final ApplicationRepository applicationRepository;
     private final ApplicationMapper applicationMapper;
     private final ProjectClientService projectClientService;
+    private final NotificationService notificationService;
+    private final EmailService emailService;
+    private final AuthClient authClient;
 
     /**
      * Creates the service with its collaborators.
@@ -70,18 +82,25 @@ public class ApplicationServiceImpl implements ApplicationService {
      * @param applicationMapper     the entity/DTO mapper
      * @param projectClientService  the Project Service client used to verify
      *                              project existence and ownership
+     * @param notificationService   the notification service for in-app events
+     * @param emailService          the email service for transactional notifications
+     * @param authClient            the Auth Service client for user lookups
      */
     public ApplicationServiceImpl(ApplicationRepository applicationRepository,
                                   ApplicationMapper applicationMapper,
-                                  ProjectClientService projectClientService) {
+                                  ProjectClientService projectClientService,
+                                  NotificationService notificationService,
+                                  EmailService emailService,
+                                  AuthClient authClient) {
         this.applicationRepository = applicationRepository;
         this.applicationMapper = applicationMapper;
         this.projectClientService = projectClientService;
+        this.notificationService = notificationService;
+        this.emailService = emailService;
+        this.authClient = authClient;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public ApplicationResponse apply(UUID freelancerId, String role, ApplicationRequest request) {
@@ -104,12 +123,14 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
         Application application = applicationRepository.save(
                 applicationMapper.toEntity(freelancerId, request));
+        // Notify the project owner that a new application was received.
+        notifyApplicationReceived(project.getUserId(), application.getId(), request.getProjectId());
+        // Email the project owner about the new application.
+        emailApplicationReceived(project.getUserId(), freelancerId, request.getProjectId());
         return applicationMapper.toResponse(application);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public Page<ApplicationResponse> getMyApplications(UUID freelancerId, Pageable pageable) {
@@ -117,9 +138,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .map(applicationMapper::toResponse);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public Page<ApplicationResponse> getApplicationsForProject(UUID creatorId, String role, UUID projectId,
@@ -132,9 +151,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .map(applicationMapper::toResponse);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public ApplicationResponse updateStatus(UUID creatorId, String role, UUID applicationId,
@@ -161,12 +178,15 @@ public class ApplicationServiceImpl implements ApplicationService {
             // this transaction back, so the application stays PENDING).
             projectClientService.updateProjectStatus(application.getProjectId(), ProjectStatus.IN_PROGRESS);
         }
-        return applicationMapper.toResponse(applicationRepository.save(application));
+        ApplicationResponse updated = applicationMapper.toResponse(applicationRepository.save(application));
+        // Notify the freelancer of the status change.
+        notifyStatusChanged(application.getFreelancerId(), requested, applicationId, application.getProjectId());
+        // Email the freelancer about the status change.
+        emailStatusChanged(application.getFreelancerId(), requested, applicationId, application.getProjectId());
+        return updated;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public void withdraw(UUID freelancerId, UUID applicationId) {
@@ -180,6 +200,8 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
         application.setStatus(ApplicationStatus.WITHDRAWN);
         applicationRepository.save(application);
+        // Notify the project owner that the application was withdrawn.
+        notifyApplicationWithdrawn(application.getProjectId(), applicationId);
     }
 
     /**
@@ -213,5 +235,104 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (!project.getUserId().equals(userId)) {
             throw new ApplicationAccessDeniedException("You do not own this project");
         }
+    }
+
+    // ---- Notification helpers (fire-and-forget) ----
+
+    private void notifyApplicationReceived(UUID projectOwnerId, UUID applicationId, UUID projectId) {
+        try {
+            notificationService.create(
+                    projectOwnerId,
+                    NotificationType.APPLICATION_RECEIVED,
+                    "New application received",
+                    "A freelancer has applied to your project.",
+                    applicationId,
+                    "APPLICATION"
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to create APPLICATION_RECEIVED notification: {}", ex.getMessage());
+        }
+    }
+
+    private void notifyStatusChanged(UUID freelancerId, ApplicationStatus status, UUID applicationId, UUID projectId) {
+        try {
+            NotificationType type = status == ApplicationStatus.ACCEPTED
+                    ? NotificationType.APPLICATION_ACCEPTED
+                    : NotificationType.APPLICATION_REJECTED;
+            String title = status == ApplicationStatus.ACCEPTED
+                    ? "Application accepted"
+                    : "Application rejected";
+            String message = status == ApplicationStatus.ACCEPTED
+                    ? "Your application has been accepted!"
+                    : "Your application has been rejected.";
+            notificationService.create(freelancerId, type, title, message, applicationId, "APPLICATION");
+        } catch (Exception ex) {
+            log.warn("Failed to create status-change notification: {}", ex.getMessage());
+        }
+    }
+
+    private void notifyApplicationWithdrawn(UUID projectId, UUID applicationId) {
+        try {
+            ProjectResponse project = projectClientService.getProject(projectId);
+            notificationService.create(
+                    project.getUserId(),
+                    NotificationType.APPLICATION_WITHDRAWN,
+                    "Application withdrawn",
+                    "A freelancer has withdrawn their application.",
+                    applicationId,
+                    "APPLICATION"
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to create APPLICATION_WITHDRAWN notification: {}", ex.getMessage());
+        }
+    }
+
+    // ---- Email helpers (fire-and-forget) ----
+
+    private void emailApplicationReceived(UUID projectOwnerId, UUID freelancerId, UUID projectId) {
+        try {
+            UserInfoResponse owner = authClient.getUserInfo(projectOwnerId).getData();
+            UserInfoResponse freelancer = authClient.getUserInfo(freelancerId).getData();
+            ProjectResponse project = projectClientService.getProject(projectId);
+            String ownerName = resolveName(owner);
+            String freelancerName = resolveName(freelancer);
+            emailService.sendApplicationReceived(
+                    owner.getEmail(), ownerName,
+                    project.getTitle(), freelancerName
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to send APPLICATION_RECEIVED email: {}", ex.getMessage());
+        }
+    }
+
+    private void emailStatusChanged(UUID freelancerId, ApplicationStatus status, UUID applicationId, UUID projectId) {
+        try {
+            UserInfoResponse freelancer = authClient.getUserInfo(freelancerId).getData();
+            ProjectResponse project = projectClientService.getProject(projectId);
+            UserInfoResponse owner = authClient.getUserInfo(project.getUserId()).getData();
+            String freelancerName = resolveName(freelancer);
+            String ownerName = resolveName(owner);
+            if (status == ApplicationStatus.ACCEPTED) {
+                emailService.sendApplicationAccepted(
+                        freelancer.getEmail(), freelancerName,
+                        project.getTitle(), ownerName
+                );
+            } else {
+                emailService.sendApplicationRejected(
+                        freelancer.getEmail(), freelancerName,
+                        project.getTitle(), ownerName
+                );
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to send status-change email: {}", ex.getMessage());
+        }
+    }
+
+    private String resolveName(UserInfoResponse user) {
+        if (user == null) return "User";
+        String first = user.getFirstName() != null ? user.getFirstName() : "";
+        String last = user.getLastName() != null ? user.getLastName() : "";
+        String fullName = (first + " " + last).trim();
+        return fullName.isEmpty() ? (user.getEmail() != null ? user.getEmail().split("@")[0] : "User") : fullName;
     }
 }

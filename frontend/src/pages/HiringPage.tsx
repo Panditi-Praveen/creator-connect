@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   applyToProject,
   getMyApplications,
@@ -17,7 +17,16 @@ export default function HiringPage() {
 
   return (
     <main className="page">
-      <h1>Hiring</h1>
+      <header className="page-header" style={{ marginBottom: '1.25rem' }}>
+        <div>
+          <h1>Hiring</h1>
+          <p className="sub">
+            {isFreelancer
+              ? 'Apply to open projects and track your proposals.'
+              : 'Review applicants for your projects and pick the right talent.'}
+          </p>
+        </div>
+      </header>
       {isFreelancer ? <FreelancerHiring /> : <CreatorHiring />}
     </main>
   )
@@ -104,7 +113,17 @@ function FreelancerHiring() {
   }
 
   if (loading) {
-    return <p className="loading">Loading hiring data…</p>
+    return (
+      <div className="skeleton-grid" aria-label="Loading hiring data">
+        {[0, 1, 2].map((item) => (
+          <div className="skeleton-card" key={item}>
+            <div className="skeleton w40" />
+            <div className="skeleton w90" />
+            <div className="skeleton w60" />
+          </div>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -121,14 +140,21 @@ function FreelancerHiring() {
       )}
 
       <section>
-        <h2>Apply to a project</h2>
+        <div className="section-head">
+          <h2>Apply to a project</h2>
+        </div>
         {projects.length === 0 ? (
           <div className="empty">
-            No projects are accepting applications right now.{' '}
-            <Link to="/projects">Browse projects</Link>
+            <span className="empty-icon" aria-hidden="true">🗂️</span>
+            <span className="empty-title">No open projects right now</span>
+            <p className="empty-desc">
+              No projects are accepting applications at the moment.{' '}
+              <Link to="/projects">Browse projects</Link> to see what is available.
+            </p>
           </div>
         ) : (
           <form className="form" onSubmit={handleApply}>
+            <div className="form-card">
             <div className="field">
               <label htmlFor="project">Project *</label>
               <select
@@ -187,16 +213,27 @@ function FreelancerHiring() {
                 {submitting ? 'Submitting…' : 'Submit application'}
               </button>
             </div>
+            </div>
           </form>
         )}
       </section>
 
       <section style={{ marginTop: '2rem' }}>
-        <h2>My applications</h2>
+        <div className="section-head">
+          <h2>My applications</h2>
+          <span className="badge badge-ai">{applications.length}</span>
+        </div>
         {applications.length === 0 ? (
-          <div className="empty">You have not applied to any project yet.</div>
+          <div className="empty">
+            <span className="empty-icon" aria-hidden="true">📨</span>
+            <span className="empty-title">No applications yet</span>
+            <p className="empty-desc">
+              You have not applied to any project yet. Find an opportunity above
+              and submit your first proposal.
+            </p>
+          </div>
         ) : (
-          <div className="card-grid">
+          <div className="card-grid stagger">
             {applications.map((application) => (
               <article className="card" key={application.id}>
                 <p>
@@ -237,6 +274,8 @@ function FreelancerHiring() {
 /* ------------------------------- Creator -------------------------------- */
 
 function CreatorHiring() {
+  const [searchParams] = useSearchParams()
+  const requestedProject = searchParams.get('project') ?? ''
   const [myProjects, setMyProjects] = useState<ProjectResponse[]>([])
   const [selectedProject, setSelectedProject] = useState('')
   const [applications, setApplications] = useState<ApplicationResponse[]>([])
@@ -260,6 +299,23 @@ function CreatorHiring() {
   useEffect(() => {
     void loadProjects()
   }, [loadProjects])
+
+  // Preselect a project from the ?project= deep link (e.g. the project detail
+  // page's "Manage in Hiring" / "View Applicants" action).
+  useEffect(() => {
+    if (myProjects.length === 0 || !requestedProject || selectedProject) return
+    if (!myProjects.some((p) => p.id === requestedProject)) return
+    setSelectedProject(requestedProject)
+    setError(null)
+    getProjectApplications(requestedProject)
+      .then((page) => setApplications(page.content))
+      .catch((err) => {
+        setError(
+          err instanceof Error ? err.message : 'Failed to load applications.',
+        )
+        setApplications([])
+      })
+  }, [myProjects, requestedProject, selectedProject])
 
   const handleProjectChange = async (projectId: string) => {
     setSelectedProject(projectId)
@@ -293,7 +349,17 @@ function CreatorHiring() {
   }
 
   if (loading) {
-    return <p className="loading">Loading your projects…</p>
+    return (
+      <div className="skeleton-grid" aria-label="Loading your projects">
+        {[0, 1, 2].map((item) => (
+          <div className="skeleton-card" key={item}>
+            <div className="skeleton w40" />
+            <div className="skeleton w90" />
+            <div className="skeleton w60" />
+          </div>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -305,11 +371,17 @@ function CreatorHiring() {
       )}
 
       <section>
-        <h2>Incoming applications</h2>
+        <div className="section-head">
+          <h2>Incoming applications</h2>
+        </div>
         {myProjects.length === 0 ? (
           <div className="empty">
-            You have not posted any projects yet.{' '}
-            <Link to="/projects/create">Create one</Link>
+            <span className="empty-icon" aria-hidden="true">📭</span>
+            <span className="empty-title">No projects posted yet</span>
+            <p className="empty-desc">
+              You have not posted any projects yet. <Link to="/projects/create">Create one</Link>{' '}
+              to start receiving applications.
+            </p>
           </div>
         ) : (
           <>
@@ -330,11 +402,18 @@ function CreatorHiring() {
             </div>
 
             {selectedProject && applications.length === 0 && (
-              <div className="empty">No applications for this project yet.</div>
+              <div className="empty">
+                <span className="empty-icon" aria-hidden="true">💬</span>
+                <span className="empty-title">No applications yet</span>
+                <p className="empty-desc">
+                  Nobody has applied to this project yet. Share the listing to
+                  attract applicants.
+                </p>
+              </div>
             )}
 
             {applications.length > 0 && (
-              <div className="card-grid">
+              <div className="card-grid stagger">
                 {applications.map((application) => (
                   <article className="card" key={application.id}>
                     <p className="muted">

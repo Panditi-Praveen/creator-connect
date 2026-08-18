@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Concrete {@link AuthService} implementation.
@@ -116,5 +118,11 @@ public class AuthServiceImpl implements AuthService {
                 .email(user.getEmail())
                 .role(user.getRole())
                 .build();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Optional<User> findById(UUID userId) {
+        return userRepository.findById(userId);
     }
 }

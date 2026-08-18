@@ -19,26 +19,47 @@ export default function ReviewsPage() {
 
   return (
     <main className="page">
-      <h1>Reviews</h1>
+      <header className="page-header" style={{ marginBottom: '1.25rem' }}>
+        <div>
+          <h1>Reviews</h1>
+          <p className="sub">
+            {isFreelancer
+              ? 'Your reputation — ratings and feedback from creators you worked with.'
+              : 'Leave feedback for freelancers after a completed project.'}
+          </p>
+        </div>
+      </header>
       {isFreelancer ? <FreelancerReviews /> : <CreatorReviews />}
     </main>
   )
 }
 
-function StarRating({ rating }: { rating: number }) {
-  return <span>{'★'.repeat(rating)}</span>
+function StarRating({ rating, size = '1rem' }: { rating: number; size?: string }) {
+  return (
+    <span
+      className="stars"
+      style={{ fontSize: size, color: '#f59e0b', letterSpacing: '0.1em' }}
+      aria-label={`${rating} out of 5 stars`}
+    >
+      {'★'.repeat(Math.max(0, Math.min(5, Math.round(rating))))}
+      <span style={{ color: 'var(--ink-300)' }}>
+        {'★'.repeat(Math.max(0, 5 - Math.min(5, Math.round(rating))))}
+      </span>
+    </span>
+  )
 }
 
 function ReviewCard({ review }: { review: ReviewResponse }) {
   return (
     <article className="card">
-      <p>
-        <StarRating rating={review.rating} />{' '}
-        <span className="muted">
-          {review.createdAt.slice(0, 10)} · project {review.projectId.slice(0, 8)}
-        </span>
+      <div className="project-card-top">
+        <StarRating rating={review.rating} size="1.1rem" />
+        <span className="budget">{review.rating}.0</span>
+      </div>
+      {review.reviewText && <p style={{ fontSize: '0.95rem', lineHeight: 1.6 }}>{review.reviewText}</p>}
+      <p className="muted" style={{ fontSize: '0.82rem', marginTop: 'auto' }}>
+        Reviewed {review.createdAt.slice(0, 10)} · project {review.projectId.slice(0, 8)}
       </p>
-      {review.reviewText && <p style={{ fontSize: '0.92rem' }}>{review.reviewText}</p>}
     </article>
   )
 }
@@ -69,7 +90,17 @@ function FreelancerReviews() {
   }, [load])
 
   if (loading) {
-    return <p className="loading">Loading reviews…</p>
+    return (
+      <div className="skeleton-grid" aria-label="Loading reviews">
+        {[0, 1, 2].map((item) => (
+          <div className="skeleton-card" key={item}>
+            <div className="skeleton w40" />
+            <div className="skeleton w90" />
+            <div className="skeleton w60" />
+          </div>
+        ))}
+      </div>
+    )
   }
 
   if (error) {
@@ -84,18 +115,37 @@ function FreelancerReviews() {
 
   return (
     <section>
-      <p>
-        <strong>Average rating:</strong> {summary.averageRating.toFixed(1)} / 5 ·{' '}
-        <strong>{summary.totalReviews}</strong>{' '}
-        {summary.totalReviews === 1 ? 'review' : 'reviews'}
-      </p>
+      <div className="stat-grid" style={{ marginBottom: '1.25rem' }}>
+        <div className="stat-card">
+          <span className="stat-icon" aria-hidden="true">⭐</span>
+          <div>
+            <div className="stat-value">{summary.averageRating.toFixed(1)} / 5</div>
+            <div className="stat-label">Average rating</div>
+            <StarRating rating={summary.averageRating} size="0.95rem" />
+          </div>
+        </div>
+        <div className="stat-card">
+          <span className="stat-icon" aria-hidden="true">💬</span>
+          <div>
+            <div className="stat-value">{summary.totalReviews}</div>
+            <div className="stat-label">
+              {summary.totalReviews === 1 ? 'Review' : 'Reviews'}
+            </div>
+            <div className="stat-hint">from completed projects</div>
+          </div>
+        </div>
+      </div>
       {summary.reviews.length === 0 ? (
         <div className="empty">
-          You do not have any reviews yet. Reviews appear after creators complete
-          projects with you.
+          <span className="empty-icon" aria-hidden="true">🌟</span>
+          <span className="empty-title">No reviews yet</span>
+          <p className="empty-desc">
+            You do not have any reviews yet. Reviews appear after creators
+            complete projects with you.
+          </p>
         </div>
       ) : (
-        <div className="card-grid">
+        <div className="card-grid stagger">
           {summary.reviews.map((review) => (
             <ReviewCard key={review.id} review={review} />
           ))}
@@ -182,16 +232,28 @@ function CreatorReviews() {
   }
 
   if (loading) {
-    return <p className="loading">Loading your projects…</p>
+    return (
+      <div className="skeleton-grid" aria-label="Loading your projects">
+        {[0, 1, 2].map((item) => (
+          <div className="skeleton-card" key={item}>
+            <div className="skeleton w40" />
+            <div className="skeleton w90" />
+            <div className="skeleton w60" />
+          </div>
+        ))}
+      </div>
+    )
   }
 
   return (
     <section>
-      <p className="muted">
-        Review a freelancer you hired. A project must be{' '}
-        <strong>completed</strong> and the freelancer's application{' '}
-        <strong>accepted</strong> before a review can be submitted.
-      </p>
+      <div className="form-card" style={{ marginBottom: '1.25rem' }}>
+        <p className="muted" style={{ margin: 0 }}>
+          Review a freelancer you hired. A project must be{' '}
+          <strong>completed</strong> and the freelancer's application{' '}
+          <strong>accepted</strong> before a review can be submitted.
+        </p>
+      </div>
 
       {error && (
         <p className="form-error" role="alert">
@@ -206,11 +268,17 @@ function CreatorReviews() {
 
       {projects.length === 0 ? (
         <div className="empty">
-          You have no completed projects to review yet.{' '}
-          <Link to="/projects">Go to projects</Link>
+          <span className="empty-icon" aria-hidden="true">✅</span>
+          <span className="empty-title">No completed projects yet</span>
+          <p className="empty-desc">
+            You have no completed projects to review yet.{' '}
+            <Link to="/projects">Go to projects</Link> and mark a project as
+            completed to unlock reviews.
+          </p>
         </div>
       ) : (
         <form className="form" onSubmit={handleSubmit}>
+          <div className="form-card">
           <div className="field">
             <label htmlFor="reviewProject">Completed project</label>
             <select
@@ -273,6 +341,7 @@ function CreatorReviews() {
               </div>
             </>
           )}
+          </div>
         </form>
       )}
     </section>

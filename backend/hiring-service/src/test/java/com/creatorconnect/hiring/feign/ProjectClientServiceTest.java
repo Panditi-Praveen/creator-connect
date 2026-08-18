@@ -37,7 +37,7 @@ class ProjectClientServiceTest {
 
     @Test
     void getProject_whenProjectExists_returnsUnwrappedProject() {
-        ProjectResponse project = new ProjectResponse(PROJECT_ID, UUID.randomUUID(), ProjectStatus.OPEN);
+        ProjectResponse project = new ProjectResponse(PROJECT_ID, "Test Project", UUID.randomUUID(), ProjectStatus.OPEN);
         when(projectClient.getProject(PROJECT_ID))
                 .thenReturn(new ProjectApiResponse<>(null, 200, "Project retrieved successfully",
                         project, "/projects/" + PROJECT_ID));
@@ -72,7 +72,7 @@ class ProjectClientServiceTest {
         ProjectClientService service = new ProjectClientService(projectClient);
         when(projectClient.updateProjectStatus(eq(PROJECT_ID), eq(new UpdateProjectStatusRequest(ProjectStatus.IN_PROGRESS))))
                 .thenReturn(new ProjectApiResponse<>(null, 200, "Project status updated successfully",
-                        new ProjectResponse(PROJECT_ID, UUID.randomUUID(), ProjectStatus.IN_PROGRESS),
+                        new ProjectResponse(PROJECT_ID, "Test Project", UUID.randomUUID(), ProjectStatus.IN_PROGRESS),
                         "/projects/" + PROJECT_ID + "/status"));
 
         service.updateProjectStatus(PROJECT_ID, ProjectStatus.IN_PROGRESS);

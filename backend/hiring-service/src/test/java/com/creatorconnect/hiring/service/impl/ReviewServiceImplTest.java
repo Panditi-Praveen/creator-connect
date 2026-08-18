@@ -15,6 +15,7 @@ import com.creatorconnect.hiring.feign.ProjectStatus;
 import com.creatorconnect.hiring.mapper.ReviewMapper;
 import com.creatorconnect.hiring.repository.ApplicationRepository;
 import com.creatorconnect.hiring.repository.ReviewRepository;
+import com.creatorconnect.hiring.service.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -57,6 +58,9 @@ class ReviewServiceImplTest {
 
     @Mock
     private ProjectClientService projectClientService;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private ReviewServiceImpl reviewService;
@@ -224,14 +228,14 @@ class ReviewServiceImplTest {
     }
 
     private ProjectResponse ownedProject() {
-        return new ProjectResponse(PROJECT_ID, CREATOR_ID, ProjectStatus.COMPLETED);
+        return new ProjectResponse(PROJECT_ID, "Test Project", CREATOR_ID, ProjectStatus.COMPLETED);
     }
 
     private ProjectResponse openProject() {
-        return new ProjectResponse(PROJECT_ID, CREATOR_ID, ProjectStatus.OPEN);
+        return new ProjectResponse(PROJECT_ID, "Test Project", CREATOR_ID, ProjectStatus.OPEN);
     }
 
     private ProjectResponse foreignProject() {
-        return new ProjectResponse(PROJECT_ID, OTHER_USER_ID, ProjectStatus.COMPLETED);
+        return new ProjectResponse(PROJECT_ID, "Test Project", OTHER_USER_ID, ProjectStatus.COMPLETED);
     }
 }

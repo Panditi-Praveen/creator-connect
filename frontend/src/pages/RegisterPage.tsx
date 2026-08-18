@@ -46,7 +46,12 @@ export default function RegisterPage() {
   return (
     <main className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1>CreatorConnect</h1>
+        <div className="auth-brand">
+          <span className="brand-mark" aria-hidden="true">
+            CC
+          </span>
+          <h1>CreatorConnect</h1>
+        </div>
         <h2>Create your account</h2>
 
         {error && (

@@ -4,6 +4,10 @@ import com.creatorconnect.auth.dto.request.LoginRequest;
 import com.creatorconnect.auth.dto.request.RegisterRequest;
 import com.creatorconnect.auth.dto.response.LoginResponse;
 import com.creatorconnect.auth.dto.response.RegisterResponse;
+import com.creatorconnect.auth.entity.User;
+
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Auth Service use cases — the business logic contract layer.
@@ -35,4 +39,12 @@ public interface AuthService {
      *         when the password is wrong or the account is disabled
      */
     LoginResponse login(LoginRequest request);
+
+    /**
+     * Finds a user by ID — used by internal service-to-service lookups.
+     *
+     * @param userId the user's UUID
+     * @return the user, or {@link Optional#empty()} if not found
+     */
+    Optional<User> findById(UUID userId);
 }

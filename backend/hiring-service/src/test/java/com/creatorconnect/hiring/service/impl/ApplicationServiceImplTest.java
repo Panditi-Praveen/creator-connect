@@ -11,11 +11,14 @@ import com.creatorconnect.hiring.exception.ApplicationStatusConflictException;
 import com.creatorconnect.hiring.exception.ApplicationValidationException;
 import com.creatorconnect.hiring.exception.DuplicateApplicationException;
 import com.creatorconnect.hiring.exception.ProjectNotFoundException;
+import com.creatorconnect.hiring.feign.AuthClient;
 import com.creatorconnect.hiring.feign.ProjectClientService;
 import com.creatorconnect.hiring.feign.ProjectResponse;
 import com.creatorconnect.hiring.feign.ProjectStatus;
 import com.creatorconnect.hiring.mapper.ApplicationMapper;
 import com.creatorconnect.hiring.repository.ApplicationRepository;
+import com.creatorconnect.hiring.service.EmailService;
+import com.creatorconnect.hiring.service.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -61,6 +64,15 @@ class ApplicationServiceImplTest {
 
     @Mock
     private ProjectClientService projectClientService;
+
+    @Mock
+    private NotificationService notificationService;
+
+    @Mock
+    private EmailService emailService;
+
+    @Mock
+    private AuthClient authClient;
 
     @InjectMocks
     private ApplicationServiceImpl applicationService;
@@ -332,6 +344,9 @@ class ApplicationServiceImplTest {
         Application entity = application(ApplicationStatus.PENDING);
         when(applicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.of(entity));
         when(applicationRepository.save(entity)).thenReturn(entity);
+        // withdraw() fires notifyApplicationWithdrawn() which fetches the
+        // project owner via the Project Service client.
+        when(projectClientService.getProject(PROJECT_ID)).thenReturn(ownedProject());
 
         applicationService.withdraw(FREELANCER_ID, APPLICATION_ID);
 
@@ -406,14 +421,14 @@ class ApplicationServiceImplTest {
     }
 
     private ProjectResponse ownedProject() {
-        return new ProjectResponse(PROJECT_ID, CREATOR_ID, ProjectStatus.OPEN);
+        return new ProjectResponse(PROJECT_ID, "Test Project", CREATOR_ID, ProjectStatus.OPEN);
     }
 
     private ProjectResponse foreignProject() {
-        return new ProjectResponse(PROJECT_ID, OTHER_USER_ID, ProjectStatus.OPEN);
+        return new ProjectResponse(PROJECT_ID, "Test Project", OTHER_USER_ID, ProjectStatus.OPEN);
     }
 
     private ProjectResponse projectWithStatus(ProjectStatus status) {
-        return new ProjectResponse(PROJECT_ID, CREATOR_ID, status);
+        return new ProjectResponse(PROJECT_ID, "Test Project", CREATOR_ID, status);
     }
 }

@@ -4,6 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 /**
  * CreatorConnect Hiring Service — entry point.
@@ -15,6 +16,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
  *  - Validate JWTs issued by the Auth Service on every protected request
  *  - Verify project existence and creator project-ownership against the
  *    Project Service via OpenFeign ({@code ProjectClient})
+ *  - Send transactional emails for application events (fire-and-forget)
  *
  * The service registers itself with the Eureka Service Registry on startup
  * ({@link EnableDiscoveryClient}) so the API Gateway can route /hiring/**
@@ -24,6 +26,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 @SpringBootApplication
 @EnableDiscoveryClient
 @EnableFeignClients
+@EnableAsync
 public class CreatorConnectHiringServiceApplication {
 
     public static void main(String[] args) {

@@ -50,7 +50,10 @@ export default function CreateProjectPage() {
   return (
     <main className="page">
       <header className="page-header">
-        <h1>Create project</h1>
+        <div>
+          <h1>Create project</h1>
+          <p className="sub">Post a project and start receiving applications.</p>
+        </div>
       </header>
 
       {error && (
@@ -60,107 +63,115 @@ export default function CreateProjectPage() {
       )}
 
       <form className="form" onSubmit={handleSubmit}>
-        <div className="field">
-          <label htmlFor="title">Title *</label>
-          <input
-            id="title"
-            required
-            maxLength={200}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </div>
+        <div className="form-card">
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="title">Title *</label>
+              <input
+                id="title"
+                required
+                maxLength={200}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </div>
 
-        <div className="field">
-          <label htmlFor="description">Description *</label>
-          <textarea
-            id="description"
-            required
-            rows={4}
-            maxLength={5000}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-        </div>
+            <div className="field">
+              <label htmlFor="category">Category *</label>
+              <input
+                id="category"
+                required
+                placeholder="e.g. Video Editing, Graphic Design"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+              />
+            </div>
+          </div>
 
-        <div className="field">
-          <label htmlFor="category">Category *</label>
-          <input
-            id="category"
-            required
-            placeholder="e.g. Video Editing, Graphic Design"
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-          />
-        </div>
+          <div className="field" style={{ marginTop: '1rem' }}>
+            <label htmlFor="description">Description *</label>
+            <textarea
+              id="description"
+              required
+              rows={4}
+              maxLength={5000}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
 
-        <div className="field">
-          <label htmlFor="skills">Required skills (comma separated)</label>
-          <input
-            id="skills"
-            placeholder="e.g. Premiere Pro, After Effects"
-            value={skills}
-            onChange={(event) => setSkills(event.target.value)}
-          />
-        </div>
+          <div className="field" style={{ marginTop: '1rem' }}>
+            <label htmlFor="skills">Required skills (comma separated)</label>
+            <input
+              id="skills"
+              placeholder="e.g. Premiere Pro, After Effects"
+              value={skills}
+              onChange={(event) => setSkills(event.target.value)}
+            />
+          </div>
 
-        <div className="field">
-          <label htmlFor="budget">Budget (USD) *</label>
-          <input
-            id="budget"
-            type="number"
-            required
-            min={0}
-            step="0.01"
-            value={budget}
-            onChange={(event) => setBudget(event.target.value)}
-          />
-        </div>
+          <div className="form-grid" style={{ marginTop: '1rem' }}>
+            <div className="field">
+              <label htmlFor="budget">Budget (USD) *</label>
+              <input
+                id="budget"
+                type="number"
+                required
+                min={0}
+                step="0.01"
+                value={budget}
+                onChange={(event) => setBudget(event.target.value)}
+              />
+            </div>
 
-        <div className="field">
-          <label htmlFor="duration">Duration *</label>
-          <input
-            id="duration"
-            required
-            placeholder="e.g. 4 weeks"
-            value={duration}
-            onChange={(event) => setDuration(event.target.value)}
-          />
-        </div>
+            <div className="field">
+              <label htmlFor="duration">Duration *</label>
+              <input
+                id="duration"
+                required
+                placeholder="e.g. 4 weeks"
+                value={duration}
+                onChange={(event) => setDuration(event.target.value)}
+              />
+            </div>
+          </div>
 
-        <div className="field">
-          <label htmlFor="experienceLevel">Experience level *</label>
-          <select
-            id="experienceLevel"
-            value={experienceLevel}
-            onChange={(event) => setExperienceLevel(event.target.value)}
-          >
-            <option value="Entry">Entry</option>
-            <option value="Intermediate">Intermediate</option>
-            <option value="Senior">Senior</option>
-          </select>
-        </div>
+          <div className="form-grid" style={{ marginTop: '1rem' }}>
+            <div className="field">
+              <label htmlFor="experienceLevel">Experience level *</label>
+              <select
+                id="experienceLevel"
+                value={experienceLevel}
+                onChange={(event) => setExperienceLevel(event.target.value)}
+              >
+                <option value="Entry">Entry</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Senior">Senior</option>
+              </select>
+            </div>
 
-        <div className="field">
-          <label htmlFor="location">Location</label>
-          <input
-            id="location"
-            placeholder="e.g. Remote, Mumbai"
-            value={location}
-            onChange={(event) => setLocation(event.target.value)}
-          />
-        </div>
+            <div className="field">
+              <label htmlFor="location">Location</label>
+              <input
+                id="location"
+                placeholder="e.g. Remote, Mumbai"
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+              />
+            </div>
+          </div>
 
-        <div className="field">
-          <label htmlFor="deadline">Application deadline *</label>
-          <input
-            id="deadline"
-            type="date"
-            required
-            min={MIN_DATE}
-            value={deadline}
-            onChange={(event) => setDeadline(event.target.value)}
-          />
+          <div className="field" style={{ marginTop: '1rem' }}>
+            <label htmlFor="deadline">Application deadline *</label>
+            <input
+              id="deadline"
+              type="date"
+              required
+              min={MIN_DATE}
+              value={deadline}
+              onChange={(event) => setDeadline(event.target.value)}
+            />
+          </div>
         </div>
 
         <div>

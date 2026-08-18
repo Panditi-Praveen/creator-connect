@@ -29,6 +29,8 @@ public class ProjectResponse {
 
     private UUID id;
 
+    private String title;
+
     /**
      * The project owner (matches the {@code userId} JWT claim of the creator
      * who posted the project in the Project Service).

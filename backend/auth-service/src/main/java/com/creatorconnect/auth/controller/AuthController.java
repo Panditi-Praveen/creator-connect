@@ -10,10 +10,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
 
 /**
  * REST controller exposing the Auth Service public API.
@@ -89,6 +93,38 @@ public class AuthController {
                 HttpStatus.OK.value(),
                 "Login successful",
                 loggedIn,
+                httpRequest.getRequestURI()
+        ));
+    }
+
+    /**
+     * Returns minimal user info by userId — internal service-to-service lookup.
+     *
+     * <p>Used by the Hiring Service to resolve email addresses for
+     * transactional email notifications.  This endpoint is internal and
+     * should be protected by service-to-service authentication in production.
+     */
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<ApiResponse<com.creatorconnect.auth.dto.response.UserInfoResponse>> getUserInfo(
+            @PathVariable UUID userId,
+            HttpServletRequest httpRequest) {
+
+        com.creatorconnect.auth.entity.User user = authService.findById(userId)
+                .orElseThrow(() -> new com.creatorconnect.auth.exception.UserNotFoundException(
+                        "User not found: " + userId));
+
+        com.creatorconnect.auth.dto.response.UserInfoResponse info =
+                com.creatorconnect.auth.dto.response.UserInfoResponse.builder()
+                        .userId(user.getId())
+                        .firstName(user.getFirstName())
+                        .lastName(user.getLastName())
+                        .email(user.getEmail())
+                        .build();
+
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(),
+                "User info retrieved",
+                info,
                 httpRequest.getRequestURI()
         ));
     }
