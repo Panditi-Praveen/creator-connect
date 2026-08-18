@@ -42,7 +42,7 @@ passwords, or credentials in them.
 ```
 src/
 ├── api/          Centralized Axios client + per-domain API modules
-├── components/   Shared components (ProtectedRoute, PagePlaceholder)
+├── components/   Shared components (ProtectedRoute, Navbar, AppLayout)
 ├── context/      AuthProvider (JWT session state)
 ├── hooks/        useAuth
 ├── pages/        Route pages (Login, Register, Dashboard, …)

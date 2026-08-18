@@ -1,0 +1,2022 @@
+{
+  "info": {
+    "name": "CreatorConnect - E2E API Tests",
+    "description": "End-to-end API tests for CreatorConnect, executed through the API Gateway (single entry point).\n\nBase URL: {{baseUrl}} (default http://localhost:8080).\n\nFlow (run folders in order):\n1. Auth   - register a CREATOR and a FREELANCER, login both, capture JWTs into collection variables.\n2. Profile- create/read/update the creator profile, list the freelancer pool, security negatives.\n3. Project- create two projects (one stays OPEN for hiring), read/update, lifecycle status transitions incl. 409.\n4. Hiring - freelancer applies, creator accepts (project -> IN_PROGRESS via Feign), project -> COMPLETED, review flow, security negatives.\n5. AI     - public status, discovery with the documented 502 LLM-failure contract (current OpenAI key has exhausted quota), auth negatives.\n\nRe-runnable: every run uses a fresh emailSuffix so registrations never collide.\nExpected status codes and response shapes are documented per request. No secrets are stored in this collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "1.1 Register Creator",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Fresh suffix per run so the collection is re-runnable.",
+                  "if (!pm.collectionVariables.get('emailSuffix')) {",
+                  "  pm.collectionVariables.set('emailSuffix', Date.now().toString(36));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('register creator returns 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "const json = pm.response.json();",
+                  "pm.test('message is User registered successfully', function () { pm.expect(json.message).to.eql('User registered successfully'); });",
+                  "pm.test('data.id (userId) is present', function () { pm.expect(json.data.id).to.exist; });",
+                  "pm.test('role is CREATOR', function () { pm.expect(json.data.role).to.eql('CREATOR'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"E2E\",\n  \"lastName\": \"Creator\",\n  \"email\": \"creator.{{emailSuffix}}@creatorconnect.test\",\n  \"password\": \"Passw0rd!X1\",\n  \"phone\": \"+91-9000000001\",\n  \"role\": \"CREATOR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Registers a new CREATOR account.\n\nHeaders: Content-Type: application/json\nBody: firstName, lastName, email (unique per run), password (8-64, upper+lower+digit+special), phone (optional), role\n\nExpected: 201 CREATED with data.id (the platform userId).\nErrors: 400 invalid payload · 409 email already exists."
+          },
+          "response": []
+        },
+        {
+          "name": "1.2 Register Freelancer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('register freelancer returns 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "const json = pm.response.json();",
+                  "pm.test('data.id (userId) is present', function () { pm.expect(json.data.id).to.exist; });",
+                  "pm.test('role is FREELANCER', function () { pm.expect(json.data.role).to.eql('FREELANCER'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"E2E\",\n  \"lastName\": \"Freelancer\",\n  \"email\": \"freelancer.{{emailSuffix}}@creatorconnect.test\",\n  \"password\": \"Passw0rd!X1\",\n  \"role\": \"FREELANCER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Registers a new FREELANCER account.\n\nExpected: 201 CREATED.\nErrors: 400 invalid payload · 409 email already exists."
+          },
+          "response": []
+        },
+        {
+          "name": "1.3 Login Creator (capture JWT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('login creator returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('accessToken is present', function () { pm.expect(json.data.accessToken).to.exist; });",
+                  "pm.collectionVariables.set('jwtToken', json.data.accessToken);",
+                  "pm.collectionVariables.set('userId', json.data.userId);",
+                  "pm.test('role is CREATOR', function () { pm.expect(json.data.role).to.eql('CREATOR'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"creator.{{emailSuffix}}@creatorconnect.test\",\n  \"password\": \"Passw0rd!X1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates the creator and issues a JWT.\n\nTest script auto-saves {{jwtToken}} and {{userId}} into collection variables; every protected request in this collection reuses {{jwtToken}} via its Authorization header.\n\nExpected: 200 OK, data.accessToken (JWT), data.userId.\nErrors: 401 bad credentials."
+          },
+          "response": []
+        },
+        {
+          "name": "1.4 Login Freelancer (capture JWT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('login freelancer returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('accessToken is present', function () { pm.expect(json.data.accessToken).to.exist; });",
+                  "pm.collectionVariables.set('jwtFreelancer', json.data.accessToken);",
+                  "pm.collectionVariables.set('freelancerUserId', json.data.userId);",
+                  "pm.test('role is FREELANCER', function () { pm.expect(json.data.role).to.eql('FREELANCER'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"freelancer.{{emailSuffix}}@creatorconnect.test\",\n  \"password\": \"Passw0rd!X1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates the freelancer and issues a JWT.\n\nTest script auto-saves {{jwtFreelancer}} and {{freelancerUserId}}.\n\nExpected: 200 OK."
+          },
+          "response": []
+        },
+        {
+          "name": "1.5 Negative - Register invalid payload (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('invalid register payload returns 400', function () { pm.expect(pm.response.code).to.eql(400); });",
+                  "const json = pm.response.json();",
+                  "pm.test('error envelope has status 400 and a message', function () { pm.expect(json.status).to.eql(400); pm.expect(json.message).to.exist; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"No\",\n  \"email\": \"not-an-email\",\n  \"password\": \"weak\",\n  \"role\": \"CREATOR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Missing lastName, malformed email and weak password.\n\nExpected: 400 BAD_REQUEST with the standard error envelope { timestamp, status, error, message, path }."
+          },
+          "response": []
+        },
+        {
+          "name": "1.6 Negative - Login wrong password (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('wrong password returns 401', function () { pm.expect(pm.response.code).to.eql(401); });",
+                  "pm.test('error envelope carries status 401', function () { pm.expect(pm.response.json().status).to.eql(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"creator.{{emailSuffix}}@creatorconnect.test\",\n  \"password\": \"WrongPassw0rd!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Wrong password for a valid account.\n\nExpected: 401 UNAUTHORIZED."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "2.1 Create Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create profile returns 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "const json = pm.response.json();",
+                  "pm.test('message is Profile created successfully', function () { pm.expect(json.message).to.eql('Profile created successfully'); });",
+                  "pm.test('data.id is present', function () { pm.expect(json.data.id).to.exist; });",
+                  "pm.test('owner userId comes from the JWT', function () { pm.expect(json.data.userId).to.eql(pm.collectionVariables.get('userId')); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"E2E\",\n  \"lastName\": \"Creator\",\n  \"headline\": \"Senior Video Editor & Motion Designer\",\n  \"bio\": \"10+ years crafting brand stories, product demos and social content for global clients.\",\n  \"location\": \"Bengaluru, India\",\n  \"skills\": \"Adobe Premiere Pro, After Effects, DaVinci Resolve, Color Grading\",\n  \"experience\": 10,\n  \"availableForHire\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile"
+              ]
+            },
+            "description": "Creates the authenticated user's profile. The owning userId is read from the JWT, never from the body.\n\nHeaders: Authorization: Bearer {{jwtToken}} · Content-Type: application/json\n\nExpected: 201 CREATED.\nErrors: 400 invalid payload · 401 missing/invalid JWT · 409 profile already exists."
+          },
+          "response": []
+        },
+        {
+          "name": "2.2 Get My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('get my profile returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('data.userId matches the creator', function () { pm.expect(json.data.userId).to.eql(pm.collectionVariables.get('userId')); });",
+                  "pm.test('data.firstName is present', function () { pm.expect(json.data.firstName).to.eql('E2E'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/profile/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile",
+                "me"
+              ]
+            },
+            "description": "Returns the authenticated user's own profile.\n\nExpected: 200 OK.\nErrors: 401 · 404 no profile yet."
+          },
+          "response": []
+        },
+        {
+          "name": "2.3 Get Profile by userId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('get profile by userId returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('data.userId matches the requested id', function () { pm.expect(pm.response.json().data.userId).to.eql(pm.collectionVariables.get('userId')); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/profile/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile",
+                "{{userId}}"
+              ]
+            },
+            "description": "Returns any user's profile by userId (UUID).\n\nExpected: 200 OK.\nErrors: 400 invalid UUID · 401 · 404 not found."
+          },
+          "response": []
+        },
+        {
+          "name": "2.4 Update Profile (partial)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('update profile returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('headline reflects the update', function () { pm.expect(json.data.headline).to.eql('Lead Video Editor & Creative Director'); });",
+                  "pm.test('omitted fields are preserved', function () { pm.expect(json.data.firstName).to.eql('E2E'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"headline\": \"Lead Video Editor & Creative Director\",\n  \"experience\": 12,\n  \"availableForHire\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/profile/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile",
+                "{{userId}}"
+              ]
+            },
+            "description": "Partially updates the profile (PUT-as-PATCH: omitted fields unchanged).\n\nExpected: 200 OK with the updated profile.\nErrors: 400 · 401 · 403 not the owner · 404 profile not found."
+          },
+          "response": []
+        },
+        {
+          "name": "2.5 List Freelancer Pool",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('list freelancers returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('data is an array', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/profile/freelancers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile",
+                "freelancers"
+              ]
+            },
+            "description": "Returns the unified talent pool (used by the AI Service).\n\nExpected: 200 OK with an array in data."
+          },
+          "response": []
+        },
+        {
+          "name": "2.6 Negative - Missing JWT (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('missing JWT returns 401', function () { pm.expect(pm.response.code).to.eql(401); });",
+                  "pm.test('error envelope carries status 401', function () { pm.expect(pm.response.json().status).to.eql(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/profile/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile",
+                "me"
+              ]
+            },
+            "description": "No Authorization header.\n\nExpected: 401 UNAUTHORIZED."
+          },
+          "response": []
+        },
+        {
+          "name": "2.7 Negative - Invalid JWT (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('invalid JWT returns 401', function () { pm.expect(pm.response.code).to.eql(401); });",
+                  "pm.test('error envelope carries status 401', function () { pm.expect(pm.response.json().status).to.eql(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer not.a.valid.jwt",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/profile/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile",
+                "me"
+              ]
+            },
+            "description": "Garbage token.\n\nExpected: 401 UNAUTHORIZED."
+          },
+          "response": []
+        },
+        {
+          "name": "2.8 Negative - Create profile empty body (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('empty create-profile body returns 400', function () { pm.expect(pm.response.code).to.eql(400); });",
+                  "pm.test('error message mentions firstName', function () { pm.expect(pm.response.json().message).to.include('firstName'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile"
+              ]
+            },
+            "description": "Missing required fields (firstName/lastName). Bean validation runs before the duplicate-profile check.\n\nExpected: 400 BAD_REQUEST."
+          },
+          "response": []
+        },
+        {
+          "name": "2.9 Negative - Nonexistent profile (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('unknown profile returns 404', function () { pm.expect(pm.response.code).to.eql(404); });",
+                  "pm.test('error envelope carries status 404', function () { pm.expect(pm.response.json().status).to.eql(404); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/profile/11111111-1111-1111-1111-111111111111",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile",
+                "11111111-1111-1111-1111-111111111111"
+              ]
+            },
+            "description": "Well-formed UUID with no profile behind it.\n\nExpected: 404 NOT_FOUND."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Project",
+      "item": [
+        {
+          "name": "3.1 Create Project A (stays OPEN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create project returns 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "const json = pm.response.json();",
+                  "pm.test('data.id is present', function () { pm.expect(json.data.id).to.exist; });",
+                  "pm.collectionVariables.set('projectId', json.data.id);",
+                  "pm.test('project starts OPEN', function () { pm.expect(json.data.status).to.eql('OPEN'); });",
+                  "pm.test('owner userId comes from the JWT', function () { pm.expect(json.data.userId).to.eql(pm.collectionVariables.get('userId')); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Edit 12 Short-Form Videos for a Travel Channel\",\n  \"description\": \"Weekly short-form edits (Reels/TikTok) from raw travel footage. Fast turnaround, brand-safe cuts.\",\n  \"category\": \"Video Editing\",\n  \"skillsRequired\": [\"Premiere Pro\", \"After Effects\"],\n  \"budget\": 1500.00,\n  \"duration\": \"4 weeks\",\n  \"experienceLevel\": \"Intermediate\",\n  \"location\": \"Remote\",\n  \"applicationDeadline\": \"2027-01-31\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ]
+            },
+            "description": "Posts a project for the authenticated creator. The userId is taken from the JWT.\n\nExpected: 201 CREATED with data.id saved to {{projectId}}. Project A stays OPEN for the hiring flow.\nErrors: 400 invalid payload (incl. non-future deadline) · 401."
+          },
+          "response": []
+        },
+        {
+          "name": "3.2 Create Project B (for lifecycle tests)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('create project B returns 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "pm.collectionVariables.set('projectIdB', pm.response.json().data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Brand Identity Refresh\",\n  \"description\": \"Logo, palette and social templates for a creator brand relaunch.\",\n  \"category\": \"Graphic Design\",\n  \"skillsRequired\": [\"Figma\", \"Illustrator\"],\n  \"budget\": 800.00,\n  \"duration\": \"2 weeks\",\n  \"experienceLevel\": \"Senior\",\n  \"location\": \"Remote\",\n  \"applicationDeadline\": \"2027-02-15\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ]
+            },
+            "description": "Second project used exclusively for lifecycle/state-machine tests (its status can become terminal without breaking the hiring flow on Project A).\n\nExpected: 201 CREATED, data.id saved to {{projectIdB}}."
+          },
+          "response": []
+        },
+        {
+          "name": "3.3 Get All Projects (feed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('get all projects returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('data is an array', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ]
+            },
+            "description": "Browse feed, newest first. Optional query filters (category, skill, budgetMin, budgetMax, experienceLevel, location, keyword).\n\nExpected: 200 OK with an array in data."
+          },
+          "response": []
+        },
+        {
+          "name": "3.4 Get My Projects",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('get my projects returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('data is an array', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/my",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "my"
+              ]
+            },
+            "description": "Projects owned by the authenticated user.\n\nExpected: 200 OK."
+          },
+          "response": []
+        },
+        {
+          "name": "3.5 Get Project by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('get project by id returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('data.id matches {{projectId}}', function () { pm.expect(pm.response.json().data.id).to.eql(pm.collectionVariables.get('projectId')); });",
+                  "pm.test('data.title is present', function () { pm.expect(pm.response.json().data.title).to.exist; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Single project by id. Any authenticated user may view it.\n\nExpected: 200 OK.\nErrors: 400 invalid id · 401 · 404 not found."
+          },
+          "response": []
+        },
+        {
+          "name": "3.6 Update Project (partial)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('update project returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('description reflects the update', function () { pm.expect(json.data.description).to.include('12 episodes'); });",
+                  "pm.test('status is preserved (OPEN)', function () { pm.expect(json.data.status).to.eql('OPEN'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"12 episodes total. Weekly short-form edits (Reels/TikTok) from raw travel footage. Fast turnaround, brand-safe cuts.\",\n  \"budget\": 1800.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Partial update of Project A (omitted fields unchanged).\n\nExpected: 200 OK.\nErrors: 400 · 401 · 403 not the owner · 404."
+          },
+          "response": []
+        },
+        {
+          "name": "3.7 Project B status -> IN_PROGRESS (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status transition returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('status is IN_PROGRESS', function () { pm.expect(pm.response.json().data.status).to.eql('IN_PROGRESS'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectIdB}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectIdB}}",
+                "status"
+              ]
+            },
+            "description": "State machine: OPEN -> IN_PROGRESS.\n\nExpected: 200 OK."
+          },
+          "response": []
+        },
+        {
+          "name": "3.8 Project B status -> COMPLETED (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status transition returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('status is COMPLETED', function () { pm.expect(pm.response.json().data.status).to.eql('COMPLETED'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectIdB}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectIdB}}",
+                "status"
+              ]
+            },
+            "description": "State machine: IN_PROGRESS -> COMPLETED (terminal).\n\nExpected: 200 OK."
+          },
+          "response": []
+        },
+        {
+          "name": "3.9 Negative - Illegal transition from terminal (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('transition out of a terminal state returns 409', function () { pm.expect(pm.response.code).to.eql(409); });",
+                  "pm.test('error envelope carries status 409', function () { pm.expect(pm.response.json().status).to.eql(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectIdB}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectIdB}}",
+                "status"
+              ]
+            },
+            "description": "COMPLETED is terminal and locked.\n\nExpected: 409 CONFLICT."
+          },
+          "response": []
+        },
+        {
+          "name": "3.10 Negative - Nonexistent project (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('unknown project returns 404', function () { pm.expect(pm.response.code).to.eql(404); });",
+                  "pm.test('error envelope carries status 404', function () { pm.expect(pm.response.json().status).to.eql(404); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/11111111-1111-1111-1111-111111111111",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "11111111-1111-1111-1111-111111111111"
+              ]
+            },
+            "description": "Well-formed UUID with no project behind it.\n\nExpected: 404 NOT_FOUND."
+          },
+          "response": []
+        },
+        {
+          "name": "3.11 Negative - Missing JWT (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('missing JWT returns 401', function () { pm.expect(pm.response.code).to.eql(401); });",
+                  "pm.test('error envelope carries status 401', function () { pm.expect(pm.response.json().status).to.eql(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ]
+            },
+            "description": "No Authorization header on a protected project endpoint.\n\nExpected: 401 UNAUTHORIZED."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Hiring",
+      "item": [
+        {
+          "name": "4.1 Freelancer Applies to Project A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('apply returns 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "const json = pm.response.json();",
+                  "pm.test('data.id is present', function () { pm.expect(json.data.id).to.exist; });",
+                  "pm.collectionVariables.set('applicationId', json.data.id);",
+                  "pm.test('application starts PENDING', function () { pm.expect(json.data.status).to.eql('PENDING'); });",
+                  "pm.test('freelancerId comes from the JWT', function () { pm.expect(json.data.freelancerId).to.eql(pm.collectionVariables.get('freelancerUserId')); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtFreelancer}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"proposal\": \"I have edited 200+ short-form videos for travel creators; fast turnaround with brand-safe cuts.\",\n  \"expectedBudget\": 1400.00,\n  \"estimatedDuration\": \"3 weeks\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/hiring/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "hiring",
+                "applications"
+              ]
+            },
+            "description": "Freelancer applies to Project A (OPEN). The gateway rewrites /hiring/** -> /** before forwarding to the Hiring Service.\n\nExpected: 201 CREATED, data.id saved to {{applicationId}}.\nErrors: 400 invalid payload · 401 · 403 not a freelancer · 404 project not found · 409 already applied · 503 project service unavailable."
+          },
+          "response": []
+        },
+        {
+          "name": "4.2 Get My Applications (freelancer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('get my applications returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('data.content is an array (paginated)', function () { pm.expect(json.data.content).to.be.an('array'); });",
+                  "pm.test('contains the submitted application', function () { pm.expect(json.data.content[0].id).to.eql(pm.collectionVariables.get('applicationId')); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtFreelancer}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/hiring/applications/my",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "hiring",
+                "applications",
+                "my"
+              ]
+            },
+            "description": "The freelancer's own applications (Spring Data page in data.content).\n\nExpected: 200 OK."
+          },
+          "response": []
+        },
+        {
+          "name": "4.3 Get Applications for Project (creator owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('project applications returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('data.content is an array', function () { pm.expect(json.data.content).to.be.an('array'); });",
+                  "pm.test('contains the freelancer application', function () { pm.expect(json.data.content[0].freelancerId).to.eql(pm.collectionVariables.get('freelancerUserId')); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/hiring/applications/project/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "hiring",
+                "applications",
+                "project",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Creator (owner of Project A) lists incoming applications. Ownership is verified against the Project Service via Feign.\n\nExpected: 200 OK.\nErrors: 400 · 401 · 403 not the owner · 404 · 503."
+          },
+          "response": []
+        },
+        {
+          "name": "4.4 Negative - Freelancer reads project applications (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('freelancer is denied -> 403', function () { pm.expect(pm.response.code).to.eql(403); });",
+                  "pm.test('error envelope carries status 403', function () { pm.expect(pm.response.json().status).to.eql(403); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtFreelancer}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/hiring/applications/project/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "hiring",
+                "applications",
+                "project",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Only the owning creator may read a project's incoming applications.\n\nExpected: 403 FORBIDDEN."
+          },
+          "response": []
+        },
+        {
+          "name": "4.5 Negative - Duplicate application (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('duplicate application returns 409', function () { pm.expect(pm.response.code).to.eql(409); });",
+                  "pm.test('error envelope carries status 409', function () { pm.expect(pm.response.json().status).to.eql(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtFreelancer}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"proposal\": \"Trying to apply a second time.\",\n  \"expectedBudget\": 1000.00,\n  \"estimatedDuration\": \"3 weeks\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/hiring/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "hiring",
+                "applications"
+              ]
+            },
+            "description": "Same freelancer applies to the same project again.\n\nExpected: 409 CONFLICT."
+          },
+          "response": []
+        },
+        {
+          "name": "4.6 Negative - Apply with invalid body (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('invalid application body returns 400', function () { pm.expect(pm.response.code).to.eql(400); });",
+                  "pm.test('error message mentions proposal', function () { pm.expect(pm.response.json().message).to.include('proposal'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtFreelancer}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"expectedBudget\": 1000.00,\n  \"estimatedDuration\": \"3 weeks\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/hiring/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "hiring",
+                "applications"
+              ]
+            },
+            "description": "Missing required proposal field.\n\nExpected: 400 BAD_REQUEST."
+          },
+          "response": []
+        },
+        {
+          "name": "4.7 Creator Accepts Application (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('accept application returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('application status is ACCEPTED', function () { pm.expect(pm.response.json().data.status).to.eql('ACCEPTED'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/hiring/applications/{{applicationId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "hiring",
+                "applications",
+                "{{applicationId}}",
+                "status"
+              ]
+            },
+            "description": "Creator decides on the PENDING application. Accepting also moves Project A to IN_PROGRESS in the Project Service via Feign.\n\nExpected: 200 OK, status ACCEPTED.\nErrors: 400 invalid decision · 401 · 403 · 404 · 409 not pending · 503."
+          },
+          "response": []
+        },
+        {
+          "name": "4.8 Project A status -> COMPLETED (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('project A to COMPLETED returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('status is COMPLETED', function () { pm.expect(pm.response.json().data.status).to.eql('COMPLETED'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "status"
+              ]
+            },
+            "description": "Reviews close the workflow, so the project must be COMPLETED first (IN_PROGRESS -> COMPLETED is a legal forward transition).\n\nExpected: 200 OK."
+          },
+          "response": []
+        },
+        {
+          "name": "4.9 Creator Reviews Freelancer (201)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('submit review returns 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "const json = pm.response.json();",
+                  "pm.test('message is Review submitted successfully', function () { pm.expect(json.message).to.eql('Review submitted successfully'); });",
+                  "pm.test('data.rating is 5', function () { pm.expect(json.data.rating).to.eql(5); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"freelancerId\": \"{{freelancerUserId}}\",\n  \"rating\": 5,\n  \"reviewText\": \"Excellent communication and fast, high-quality edits. Highly recommended.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/hiring/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "hiring",
+                "reviews"
+              ]
+            },
+            "description": "Creator reviews the freelancer they hired. Requires: project COMPLETED, freelancer holds an ACCEPTED application, one review per project/freelancer pair.\n\nExpected: 201 CREATED.\nErrors: 400 freelancer not hired · 401 · 403 not the owner · 404 · 409 already reviewed · 503."
+          },
+          "response": []
+        },
+        {
+          "name": "4.10 Get Freelancer Reviews",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('get freelancer reviews returns 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('totalReviews is at least 1', function () { pm.expect(json.data.totalReviews).to.be.at.least(1); });",
+                  "pm.test('averageRating is present', function () { pm.expect(json.data.averageRating).to.exist; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/hiring/reviews/freelancer/{{freelancerUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "hiring",
+                "reviews",
+                "freelancer",
+                "{{freelancerUserId}}"
+              ]
+            },
+            "description": "Any authenticated user may read a freelancer's review summary.\n\nExpected: 200 OK with reviews, totalReviews and averageRating."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "5.1 AI Status (public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('ai status returns 200 without auth', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('message is AI service is up', function () { pm.expect(json.message).to.eql('AI service is up'); });",
+                  "pm.test('data.status is UP', function () { pm.expect(json.data.status).to.eql('UP'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/ai/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "status"
+              ]
+            },
+            "description": "Public health/status check - no JWT required by design.\n\nExpected: 200 OK."
+          },
+          "response": []
+        },
+        {
+          "name": "5.2 AI Discovery (valid JWT, realistic query)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// The configured OPENAI_API_KEY has exhausted its quota (external account limit).",
+                  "// Per the documented error contract the service must answer 502 with a generic message.",
+                  "// If a valid key is configured later, the same test asserts the success shape.",
+                  "if (pm.response.code === 502) {",
+                  "  pm.test('LLM quota failure -> 502 per contract', function () { pm.expect(pm.response.code).to.eql(502); });",
+                  "  pm.test('502 error message is generic and client-safe', function () { pm.expect(pm.response.json().message).to.eql('AI service is temporarily unavailable'); });",
+                  "} else {",
+                  "  pm.test('discovery returns 200 with ranked results', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "  const data = pm.response.json().data;",
+                  "  pm.test('data.results is an array', function () { pm.expect(data.results).to.be.an('array'); });",
+                  "  pm.test('data.count matches results length', function () { pm.expect(data.count).to.eql(data.results.length); });",
+                  "  pm.test('results carry the documented fields', function () {",
+                  "    if (data.results.length > 0) {",
+                  "      const r = data.results[0];",
+                  "      pm.expect(r).to.have.property('profileId');",
+                  "      pm.expect(r).to.have.property('score');",
+                  "      pm.expect(r).to.have.property('reason');",
+                  "    }",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Find Java developers with Spring Boot, microservices and REST API experience.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/discover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "discover"
+              ]
+            },
+            "description": "Natural-language talent discovery. Requires a valid JWT. The AI Service fetches the talent pool from the Profile Service via OpenFeign (forwarding the caller's JWT) and asks the external LLM to rank it.\n\nCurrent state: the configured OPENAI_API_KEY has exhausted its quota, so the documented 502 LLM-failure contract is expected (no fake results are ever produced). When a valid key is configured, a 200 with ranked results is expected.\n\nExpected today: 502 BAD_GATEWAY, message 'AI service is temporarily unavailable'."
+          },
+          "response": []
+        },
+        {
+          "name": "5.3 Negative - Discovery without JWT (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('discovery without JWT returns 401', function () { pm.expect(pm.response.code).to.eql(401); });",
+                  "pm.test('error message is Authentication required', function () { pm.expect(pm.response.json().message).to.eql('Authentication required'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Find Java developers with Spring Boot experience.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/discover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "discover"
+              ]
+            },
+            "description": "No Authorization header.\n\nExpected: 401 UNAUTHORIZED."
+          },
+          "response": []
+        },
+        {
+          "name": "5.4 Negative - Discovery with invalid JWT (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('discovery with invalid JWT returns 401', function () { pm.expect(pm.response.code).to.eql(401); });",
+                  "pm.test('error envelope carries status 401', function () { pm.expect(pm.response.json().status).to.eql(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer garbage.token.value",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Find Java developers with Spring Boot experience.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/discover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "discover"
+              ]
+            },
+            "description": "Garbage token.\n\nExpected: 401 UNAUTHORIZED."
+          },
+          "response": []
+        },
+        {
+          "name": "5.5 Negative - Discovery empty query (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('empty query returns 400', function () { pm.expect(pm.response.code).to.eql(400); });",
+                  "pm.test('error message is query Query is required', function () { pm.expect(pm.response.json().message).to.eql('query Query is required'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/discover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "discover"
+              ]
+            },
+            "description": "Blank query violates @NotBlank.\n\nExpected: 400 BAD_REQUEST."
+          },
+          "response": []
+        },
+        {
+          "name": "5.6 Negative - Discovery query over 500 chars (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('oversized query returns 400', function () { pm.expect(pm.response.code).to.eql(400); });",
+                  "pm.test('error message mentions the 500-character limit', function () { pm.expect(pm.response.json().message).to.include('500 characters'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/discover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "discover"
+              ]
+            },
+            "description": "Query longer than 500 characters violates @Size(max = 500).\n\nExpected: 400 BAD_REQUEST."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jwtFreelancer",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "freelancerUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "projectIdB",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "applicationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "emailSuffix",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

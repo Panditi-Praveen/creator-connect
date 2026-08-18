@@ -7,8 +7,8 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY target/service-registry-1.0.0.jar app.jar
+COPY target/auth-service-1.0.0.jar app.jar
 
-EXPOSE 8761
+EXPOSE 8081
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
