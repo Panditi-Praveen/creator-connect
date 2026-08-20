@@ -154,6 +154,16 @@ services:
       - MYSQL_USER=${MYSQL_USER:-root}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}
       - APP_JWT_SECRET=${APP_JWT_SECRET:?APP_JWT_SECRET must be set in .env}
+      # Transactional email — MAIL_ENABLED=false (default) skips sends gracefully.
+      - MAIL_ENABLED=${MAIL_ENABLED:-false}
+      - MAIL_HOST=${MAIL_HOST:-smtp.gmail.com}
+      - MAIL_PORT=${MAIL_PORT:-587}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - MAIL_SMTP_AUTH=${MAIL_SMTP_AUTH:-true}
+      - MAIL_STARTTLS=${MAIL_STARTTLS:-true}
+      - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-noreply@creatorconnect.app}
+      - MAIL_FROM_NAME=${MAIL_FROM_NAME:-CreatorConnect}
     depends_on:
       mysql:
         condition: service_healthy

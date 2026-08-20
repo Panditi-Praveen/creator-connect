@@ -10,8 +10,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -141,6 +146,25 @@ public class LlmClient {
                 throw new AiLlmException("AI service returned an empty response", null);
             }
             return response.choices().get(0).message().content();
+        } catch (HttpClientErrorException ex) {
+            int status = ex.getStatusCode().value();
+            if (status == 401 || status == 403) {
+                log.warn("LLM rejected API key (HTTP {})", status);
+                throw new AiConfigurationException(
+                        "AI service credentials are invalid: check the OPENAI_API_KEY");
+            }
+            if (status == 429) {
+                log.warn("LLM rate-limited (HTTP 429)");
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                        "AI service rate limit exceeded — please try again later");
+            }
+            log.warn("LLM client error (HTTP {}): {}", status, ex.getMessage());
+            throw new AiLlmException("AI service returned an error (HTTP " + status + ")", ex);
+        } catch (HttpServerErrorException ex) {
+            int status = ex.getStatusCode().value();
+            log.warn("LLM provider error (HTTP {}): {}", status, ex.getMessage());
+            throw new AiLlmException(
+                    "AI service provider error (HTTP " + status + ")", ex);
         } catch (RestClientException ex) {
             log.warn("LLM call failed: {}", ex.getMessage());
             throw new AiLlmException("AI service is temporarily unavailable", ex);

@@ -142,7 +142,12 @@ export default function ProjectDetailPage() {
 
   const handleDelete = async () => {
     if (!project) return
-    if (!window.confirm('Delete this project permanently?')) return
+    const confirmed = await swalConfirm(
+      'Delete project?',
+      'This action cannot be undone. Are you sure you want to permanently delete this project?',
+      'Delete',
+    )
+    if (!confirmed) return
     setBusy(true)
     setError(null)
     try {

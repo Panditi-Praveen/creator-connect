@@ -10,6 +10,7 @@ import {
 import { listMyProjects, listProjects } from '../api/projects'
 import type { ApplicationResponse, ProjectResponse } from '../types/api'
 import { useAuth } from '../hooks/useAuth'
+import { swalConfirm, swalSuccess, swalError } from '../utils/notify'
 
 export default function HiringPage() {
   const { user } = useAuth()
@@ -93,6 +94,11 @@ function FreelancerHiring() {
       setBudget('')
       setDuration('')
       setSelectedProject('')
+      void swalSuccess(
+        'Application Submitted!',
+        'Your application has been submitted successfully.',
+        'OK',
+      )
       setSuccess('Application submitted successfully.')
       await load()
     } catch (err) {
@@ -103,11 +109,19 @@ function FreelancerHiring() {
   }
 
   const handleWithdraw = async (applicationId: string) => {
+    const confirmed = await swalConfirm(
+      'Withdraw application?',
+      'This action cannot be undone. Are you sure?',
+      'Withdraw',
+    )
+    if (!confirmed) return
     setError(null)
     try {
       await withdrawApplication(applicationId)
+      void swalSuccess('Withdrawn', 'Your application has been withdrawn.')
       await load()
     } catch (err) {
+      void swalError('Error', err instanceof Error ? err.message : 'Failed to withdraw application.')
       setError(err instanceof Error ? err.message : 'Failed to withdraw application.')
     }
   }
@@ -336,12 +350,29 @@ function CreatorHiring() {
   }
 
   const handleDecision = async (applicationId: string, status: 'ACCEPTED' | 'REJECTED') => {
+    if (status === 'REJECTED') {
+      const confirmed = await swalConfirm(
+        'Reject application?',
+        'Are you sure you want to reject this application?',
+        'Reject',
+      )
+      if (!confirmed) return
+    }
     setBusy(true)
     setError(null)
     try {
       await updateApplicationStatus(applicationId, status)
+      if (status === 'ACCEPTED') {
+        void swalSuccess(
+          'Application Accepted',
+          'The freelancer has been selected for this project.',
+        )
+      } else {
+        void swalSuccess('Application Rejected', 'The application has been rejected.')
+      }
       await handleProjectChange(selectedProject)
     } catch (err) {
+      void swalError('Error', err instanceof Error ? err.message : 'Failed to update application.')
       setError(err instanceof Error ? err.message : 'Failed to update application.')
     } finally {
       setBusy(false)
