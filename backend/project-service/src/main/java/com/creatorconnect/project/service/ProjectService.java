@@ -41,7 +41,7 @@ public interface ProjectService {
 
     /**
      * Returns the browse feed, most recently created first, filtered by the
-     * given optional criteria.
+
      *
      * @param filter the optional feed filters (every field {@code null}
      *               returns the unfiltered feed)
@@ -58,7 +58,7 @@ public interface ProjectService {
      * @throws com.creatorconnect.project.exception.ProjectNotFoundException
      *         when no project has the given id
      */
-    ProjectResponse getProjectById(UUID projectId);
+    ProjectResponse getProjectById(UUID projectId) ;
 
     /**
      * Returns all projects owned by the given user, most recently created
@@ -83,7 +83,7 @@ public interface ProjectService {
      * @throws com.creatorconnect.project.exception.ProjectAccessDeniedException
      *         when the caller is not the project owner
      */
-    ProjectResponse updateProject(UUID authenticatedUserId, UUID projectId, UpdateProjectRequest request);
+    ProjectResponse  updateProject(UUID authenticatedUserId, UUID projectId, UpdateProjectRequest request);
 
     /**
      * Deletes the project with the given id.
