@@ -40,6 +40,12 @@ public class ProfileMapper {
                 .bio(normalize(request.getBio()))
                 .profileImageUrl(normalize(request.getProfileImageUrl()))
                 .location(normalize(request.getLocation()))
+                .latitude(request.getLatitude())
+                .longitude(request.getLongitude())
+                .city(normalize(request.getCity()))
+                .state(normalize(request.getState()))
+                .country(normalize(request.getCountry()))
+                .formattedAddress(normalize(request.getFormattedAddress()))
                 .website(normalize(request.getWebsite()))
                 .linkedin(normalize(request.getLinkedin()))
                 .github(normalize(request.getGithub()))
@@ -83,6 +89,24 @@ public class ProfileMapper {
         }
         if (request.getLocation() != null) {
             profile.setLocation(normalize(request.getLocation()));
+        }
+        if (request.getLatitude() != null) {
+            profile.setLatitude(request.getLatitude());
+        }
+        if (request.getLongitude() != null) {
+            profile.setLongitude(request.getLongitude());
+        }
+        if (request.getCity() != null) {
+            profile.setCity(normalize(request.getCity()));
+        }
+        if (request.getState() != null) {
+            profile.setState(normalize(request.getState()));
+        }
+        if (request.getCountry() != null) {
+            profile.setCountry(normalize(request.getCountry()));
+        }
+        if (request.getFormattedAddress() != null) {
+            profile.setFormattedAddress(normalize(request.getFormattedAddress()));
         }
         if (request.getWebsite() != null) {
             profile.setWebsite(normalize(request.getWebsite()));
@@ -137,7 +161,14 @@ public class ProfileMapper {
                 .headline(profile.getHeadline())
                 .bio(profile.getBio())
                 .profileImageUrl(profile.getProfileImageUrl())
+                .profileImagePath(profile.getProfileImagePath())
                 .location(profile.getLocation())
+                .latitude(profile.getLatitude())
+                .longitude(profile.getLongitude())
+                .city(profile.getCity())
+                .state(profile.getState())
+                .country(profile.getCountry())
+                .formattedAddress(profile.getFormattedAddress())
                 .website(profile.getWebsite())
                 .linkedin(profile.getLinkedin())
                 .github(profile.getGithub())

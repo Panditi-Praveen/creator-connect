@@ -3,6 +3,7 @@ package com.creatorconnect.profile.service;
 import com.creatorconnect.profile.dto.request.ProfileRequest;
 import com.creatorconnect.profile.dto.request.UpdateProfileRequest;
 import com.creatorconnect.profile.dto.response.ProfileResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -77,4 +78,34 @@ public interface ProfileService {
      *         when the caller is not the profile owner
      */
     void deleteProfile(UUID authenticatedUserId, UUID targetUserId);
+
+    /**
+     * Uploads or replaces the authenticated user's profile picture.
+     *
+     * @param authenticatedUserId the caller's id (from the JWT)
+     * @param file                the image file to upload
+     * @return the updated profile projection with the new image URL
+     * @throws com.creatorconnect.profile.exception.ProfileNotFoundException
+     *         when the user has no profile
+     * @throws com.creatorconnect.profile.exception.InvalidFileException
+     *         when the file fails validation
+     */
+    ProfileResponse uploadProfilePicture(UUID authenticatedUserId, MultipartFile file);
+
+    /**
+     * Saves or updates the authenticated user's location details.
+     *
+     * @param authenticatedUserId the caller's id (from the JWT)
+     * @param latitude            the geographic latitude
+     * @param longitude           the geographic longitude
+     * @param city                optional city name
+     * @param state               optional state/province name
+     * @param country             optional country name
+     * @param formattedAddress    optional formatted address string
+     * @return the updated profile projection with the new location data
+     * @throws com.creatorconnect.profile.exception.ProfileNotFoundException
+     *         when the user has no profile
+     */
+    ProfileResponse updateLocation(UUID authenticatedUserId, Double latitude, Double longitude,
+                                   String city, String state, String country, String formattedAddress);
 }

@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   createProfile,
   getMyProfile,
   updateProfile,
+  uploadProfilePicture,
+  updateLocation,
 } from '../api/profile'
 import { ApiError } from '../api/client'
 import type { ProfileResponse } from '../types/api'
 import { useAuth } from '../hooks/useAuth'
+import { swalSuccess, swalError } from '../utils/notify'
 
 type FormState = {
   firstName: string
@@ -61,6 +64,10 @@ export default function ProfilePage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [fetchingLocation, setFetchingLocation] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -90,6 +97,115 @@ export default function ProfilePage() {
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
+
+  const handlePhotoUpload = useCallback(async (file: File) => {
+    setUploadingPhoto(true)
+    try {
+      const updated = await uploadProfilePicture(file)
+      setProfile(updated)
+      setForm(fromProfile(updated))
+      setPhotoPreview(null)
+      await swalSuccess('Profile Picture Updated', 'Your profile picture has been uploaded successfully.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to upload profile picture.'
+      await swalError('Upload Failed', message)
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }, [])
+
+  const handlePhotoFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type on client side
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      swalError('Invalid File', 'Please select a JPG, JPEG, PNG, or WEBP image file.')
+      return
+    }
+
+    // Validate file size (10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+      swalError('File Too Large', 'The maximum file size is 10 MB.')
+      return
+    }
+
+    // Show preview
+    const reader = new FileReader()
+    reader.onload = (e) => setPhotoPreview(e.target?.result as string)
+    reader.readAsDataURL(file)
+
+    void handlePhotoUpload(file)
+    // Reset the input so the same file can be re-selected
+    event.target.value = ''
+  }, [handlePhotoUpload])
+
+  const handleUseCurrentLocation = useCallback(async () => {
+    if (!navigator.geolocation) {
+      await swalError('Not Supported', 'Geolocation is not supported by your browser.')
+      return
+    }
+
+    setFetchingLocation(true)
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000,
+        })
+      })
+
+      const { latitude, longitude } = position.coords
+
+      // Try reverse geocoding via a free API
+      let city = ''
+      let state = ''
+      let country = ''
+      let formattedAddress = ''
+
+      try {
+        const geoResponse = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+        )
+        const geoData = await geoResponse.json()
+        if (geoData.address) {
+          city = geoData.address.city || geoData.address.town || geoData.address.village || ''
+          state = geoData.address.state || ''
+          country = geoData.address.country || ''
+          formattedAddress = geoData.display_name || ''
+        }
+      } catch {
+        // Geocoding failed — still save coordinates
+      }
+
+      const updated = await updateLocation({
+        latitude,
+        longitude,
+        city,
+        state,
+        country,
+        formattedAddress,
+      })
+      setProfile(updated)
+      setForm(fromProfile(updated))
+      await swalSuccess('Location Updated', 'Your current location has been saved successfully.')
+    } catch (err) {
+      if (err instanceof GeolocationPositionError) {
+        let message = 'Unable to retrieve your location.'
+        if (err.code === 1) message = 'Location permission denied. Please allow location access in your browser settings.'
+        else if (err.code === 2) message = 'Location unavailable. Please try again.'
+        else if (err.code === 3) message = 'Location request timed out. Please try again.'
+        await swalError('Location Error', message)
+      } else {
+        const message = err instanceof Error ? err.message : 'Failed to save location.'
+        await swalError('Location Error', message)
+      }
+    } finally {
+      setFetchingLocation(false)
+    }
+  }, [])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -181,22 +297,67 @@ export default function ProfilePage() {
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('')
 
+  const displayImage = photoPreview || profile?.profileImagePath
+    ? (photoPreview || `/profile/me/photo?t=${profile?.updatedAt ?? ''}`)
+    : null
+
   return (
     <main className="page">
       {editing && profile && (
         <section className="profile-card">
           <div className="profile-cover" />
           <div className="profile-head">
-            <span className="avatar" aria-hidden="true">
-              {initials || '?'}
-            </span>
+            <div style={{ position: 'relative', marginTop: '-38px' }}>
+              {displayImage ? (
+                <img
+                  src={displayImage}
+                  alt="Profile"
+                  className="avatar"
+                  style={{ width: 74, height: 74, fontSize: '1.5rem', borderRadius: 22, boxShadow: '0 0 0 4px var(--surface), var(--shadow-sm)', objectFit: 'cover' }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              ) : (
+                <span className="avatar" aria-hidden="true" style={{ width: 74, height: 74, fontSize: '1.5rem', borderRadius: 22, marginTop: 0 }}>
+                  {initials || '?'}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="btn btn-sm btn-ghost"
+                style={{
+                  position: 'absolute',
+                  bottom: -4,
+                  right: -4,
+                  padding: '0.25rem 0.5rem',
+                  fontSize: '0.7rem',
+                  borderRadius: 8,
+                  background: 'var(--primary-600)',
+                  color: '#fff',
+                  border: '2px solid var(--surface)',
+                  boxShadow: 'var(--shadow-sm)',
+                  cursor: 'pointer',
+                }}
+                title="Upload photo"
+              >
+                {uploadingPhoto ? '...' : '📷'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                onChange={handlePhotoFileChange}
+                style={{ display: 'none' }}
+              />
+            </div>
             <div className="profile-head-info">
               <h1>
                 {profile.firstName} {profile.lastName}
               </h1>
               {profile.headline && <p className="headline">{profile.headline}</p>}
               <p className="muted" style={{ margin: '0.35rem 0 0', fontSize: '0.88rem' }}>
-                {profile.location ?? 'Remote'}
+                {profile.location ?? profile.city ?? 'Remote'}
                 {profile.experience ? ` · ${profile.experience} yr${profile.experience === 1 ? '' : 's'} experience` : ''}
                 {profile.availableForHire === false ? ' · Not available' : ' · Available for hire'}
               </p>
@@ -323,6 +484,35 @@ export default function ProfilePage() {
               />
             </div>
           </div>
+
+          {editing && (
+            <div className="form-card" style={{ marginTop: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1rem' }}>Current Location</h3>
+                  <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: '0.85rem' }}>
+                    {profile.latitude && profile.longitude
+                      ? `${profile.latitude.toFixed(4)}, ${profile.longitude.toFixed(4)}`
+                      : 'No location set'}
+                    {profile.city ? ` · ${profile.city}` : ''}
+                    {profile.country ? `, ${profile.country}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => void handleUseCurrentLocation()}
+                  disabled={fetchingLocation}
+                >
+                  {fetchingLocation ? (
+                    <>⏳ Fetching...</>
+                  ) : (
+                    <>📍 Use My Current Location</>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="field" style={{ marginTop: '1rem' }}>
             <label htmlFor="skills">Skills (comma separated)</label>

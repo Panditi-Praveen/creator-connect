@@ -77,6 +77,12 @@ export interface ProfileRequest {
   bio?: string
   profileImageUrl?: string
   location?: string
+  latitude?: number
+  longitude?: number
+  city?: string
+  state?: string
+  country?: string
+  formattedAddress?: string
   website?: string
   linkedin?: string
   github?: string
@@ -93,7 +99,14 @@ export interface ProfileResponse {
   headline?: string
   bio?: string
   profileImageUrl?: string
+  profileImagePath?: string
   location?: string
+  latitude?: number
+  longitude?: number
+  city?: string
+  state?: string
+  country?: string
+  formattedAddress?: string
   website?: string
   linkedin?: string
   github?: string

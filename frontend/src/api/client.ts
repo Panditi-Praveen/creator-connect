@@ -150,4 +150,17 @@ export async function patch<T>(url: string, body?: unknown): Promise<T> {
   return response.data
 }
 
+/**
+ * Uploads a file via multipart/form-data.
+ * The JWT is attached by the existing request interceptor.
+ */
+export async function uploadFile<T>(url: string, file: File): Promise<T> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await http.post<T>(url, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return response.data
+}
+
 export default http

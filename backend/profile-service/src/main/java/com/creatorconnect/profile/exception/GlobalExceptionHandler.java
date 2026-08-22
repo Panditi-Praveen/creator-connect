@@ -59,6 +59,19 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles invalid file uploads (wrong type, too large, etc.).
+     *
+     * @param ex      the thrown exception
+     * @param request the originating HTTP request
+     * @return {@code 400 BAD_REQUEST} with the exception message
+     */
+    @ExceptionHandler(InvalidFileException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidFile(InvalidFileException ex,
+                                                           HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    }
+
+    /**
      * Handles attempts to modify or delete a profile owned by another user.
      *
      * @param ex      the thrown exception

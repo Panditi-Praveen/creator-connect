@@ -12,6 +12,7 @@ import com.creatorconnect.profile.repository.ProfileRepository;
 import com.creatorconnect.profile.service.ProfileService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -39,16 +40,20 @@ public class ProfileServiceImpl implements ProfileService {
 
     private final ProfileRepository profileRepository;
     private final ProfileMapper profileMapper;
+    private final FileStorageService fileStorageService;
 
     /**
      * Creates the service with its collaborators.
      *
-     * @param profileRepository the profile data access layer
-     * @param profileMapper     the entity/DTO mapper
+     * @param profileRepository  the profile data access layer
+     * @param profileMapper      the entity/DTO mapper
+     * @param fileStorageService the file storage service for profile pictures
      */
-    public ProfileServiceImpl(ProfileRepository profileRepository, ProfileMapper profileMapper) {
+    public ProfileServiceImpl(ProfileRepository profileRepository, ProfileMapper profileMapper,
+                              FileStorageService fileStorageService) {
         this.profileRepository = profileRepository;
         this.profileMapper = profileMapper;
+        this.fileStorageService = fileStorageService;
     }
 
     /**
@@ -105,6 +110,68 @@ public class ProfileServiceImpl implements ProfileService {
     public void deleteProfile(UUID authenticatedUserId, UUID targetUserId) {
         Profile profile = findOwnedProfile(authenticatedUserId, targetUserId);
         profileRepository.delete(profile);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
+    public ProfileResponse uploadProfilePicture(UUID authenticatedUserId, MultipartFile file) {
+        Profile profile = profileRepository.findByUserId(authenticatedUserId)
+                .orElseThrow(() -> new ProfileNotFoundException(
+                        "Profile not found for user: " + authenticatedUserId));
+
+        // Delete the old picture if one exists
+        fileStorageService.deleteFile(profile.getProfileImagePath());
+
+        // Store the new picture
+        String relativePath = fileStorageService.storeFile(file);
+        profile.setProfileImagePath(relativePath);
+        profile.setProfileImageUrl("/profile/me/photo");
+
+        return profileMapper.toResponse(profileRepository.save(profile));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
+    public ProfileResponse updateLocation(UUID authenticatedUserId, Double latitude, Double longitude,
+                                          String city, String state, String country, String formattedAddress) {
+        Profile profile = profileRepository.findByUserId(authenticatedUserId)
+                .orElseThrow(() -> new ProfileNotFoundException(
+                        "Profile not found for user: " + authenticatedUserId));
+
+        if (latitude != null) {
+            if (latitude < -90 || latitude > 90) {
+                throw new com.creatorconnect.profile.exception.InvalidFileException(
+                        "Latitude must be between -90 and 90");
+            }
+            profile.setLatitude(latitude);
+        }
+        if (longitude != null) {
+            if (longitude < -180 || longitude > 180) {
+                throw new com.creatorconnect.profile.exception.InvalidFileException(
+                        "Longitude must be between -180 and 180");
+            }
+            profile.setLongitude(longitude);
+        }
+        if (city != null) {
+            profile.setCity(city.isBlank() ? null : city.trim());
+        }
+        if (state != null) {
+            profile.setState(state.isBlank() ? null : state.trim());
+        }
+        if (country != null) {
+            profile.setCountry(country.isBlank() ? null : country.trim());
+        }
+        if (formattedAddress != null) {
+            profile.setFormattedAddress(formattedAddress.isBlank() ? null : formattedAddress.trim());
+        }
+
+        return profileMapper.toResponse(profileRepository.save(profile));
     }
 
     /**

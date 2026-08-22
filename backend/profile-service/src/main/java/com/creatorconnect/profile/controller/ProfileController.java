@@ -4,15 +4,23 @@ import com.creatorconnect.profile.dto.request.ProfileRequest;
 import com.creatorconnect.profile.dto.request.UpdateProfileRequest;
 import com.creatorconnect.profile.dto.response.ApiResponse;
 import com.creatorconnect.profile.dto.response.ProfileResponse;
+import com.creatorconnect.profile.entity.Profile;
+import com.creatorconnect.profile.repository.ProfileRepository;
 import com.creatorconnect.profile.security.ProfilePrincipal;
 import com.creatorconnect.profile.service.ProfileService;
+import com.creatorconnect.profile.service.impl.FileStorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,8 +30,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 
@@ -46,14 +57,21 @@ import java.util.UUID;
 public class ProfileController {
 
     private final ProfileService profileService;
+    private final FileStorageService fileStorageService;
+    private final ProfileRepository profileRepository;
 
     /**
-     * Creates the controller with its service dependency.
+     * Creates the controller with its service dependencies.
      *
-     * @param profileService the profile business logic
+     * @param profileService    the profile business logic
+     * @param fileStorageService the file storage service
+     * @param profileRepository the profile repository
      */
-    public ProfileController(ProfileService profileService) {
+    public ProfileController(ProfileService profileService, FileStorageService fileStorageService,
+                            ProfileRepository profileRepository) {
         this.profileService = profileService;
+        this.fileStorageService = fileStorageService;
+        this.profileRepository = profileRepository;
     }
 
     /**
@@ -294,5 +312,151 @@ public class ProfileController {
                 null,
                 httpRequest.getRequestURI()
         ));
+    }
+
+    /**
+     * Uploads or replaces the authenticated user's profile picture.
+     *
+     * @param file             the image file (multipart/form-data)
+     * @param authentication   the current security context
+     * @param httpRequest      the raw request
+     * @return {@code 200 OK} with the updated profile
+     */
+    @PostMapping(value = "/me/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Upload profile picture",
+            description = "Uploads or replaces the profile picture for the authenticated user. "
+                    + "Only JPG, JPEG, PNG, and WEBP files up to 10 MB are accepted."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "Profile picture uploaded"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "Invalid file type or size"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "Missing or invalid JWT"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "Profile not found")
+    })
+    public ResponseEntity<ApiResponse<ProfileResponse>> uploadProfilePicture(
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+
+        ProfilePrincipal principal = (ProfilePrincipal) authentication.getPrincipal();
+        ProfileResponse updated = profileService.uploadProfilePicture(principal.userId(), file);
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(),
+                "Profile picture uploaded successfully",
+                updated,
+                httpRequest.getRequestURI()
+        ));
+    }
+
+    /**
+     * Serves the authenticated user's profile picture as a static resource.
+     *
+     * @param authentication the current security context
+     * @param response       the HTTP response
+     * @return the image file with the correct content type
+     */
+    @GetMapping("/me/photo")
+    @Operation(
+            summary = "Get profile picture",
+            description = "Returns the authenticated user's profile picture as an image file."
+    )
+    public ResponseEntity<Resource> getProfilePicture(
+            Authentication authentication,
+            HttpServletResponse response) {
+
+        ProfilePrincipal principal = (ProfilePrincipal) authentication.getPrincipal();
+        Profile profile = profileRepository.findByUserId(principal.userId())
+                .orElse(null);
+
+        if (profile == null || profile.getProfileImagePath() == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        try {
+            Path filePath = fileStorageService.resolvePath(profile.getProfileImagePath());
+            Resource resource = new UrlResource(filePath.toUri());
+
+            if (!resource.exists()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            String contentType = determineContentType(profile.getProfileImagePath());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                    .body(resource);
+        } catch (java.net.MalformedURLException ex) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
+     * Saves the authenticated user's current location details.
+     *
+     * @param latitude       the geographic latitude
+     * @param longitude      the geographic longitude
+     * @param city           optional city name
+     * @param state          optional state/province
+     * @param country        optional country
+     * @param formattedAddress optional formatted address
+     * @param authentication the current security context
+     * @param httpRequest    the raw request
+     * @return {@code 200 OK} with the updated profile
+     */
+    @PutMapping("/me/location")
+    @Operation(
+            summary = "Update location",
+            description = "Saves or updates the authenticated user's geographic location. "
+                    + "Only the authenticated user can update their own location."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "Location updated"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "Invalid coordinates"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "Missing or invalid JWT"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "Profile not found")
+    })
+    public ResponseEntity<ApiResponse<ProfileResponse>> updateLocation(
+            @RequestParam(required = false) Double latitude,
+            @RequestParam(required = false) Double longitude,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String country,
+            @RequestParam(required = false) String formattedAddress,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+
+        ProfilePrincipal principal = (ProfilePrincipal) authentication.getPrincipal();
+        ProfileResponse updated = profileService.updateLocation(
+                principal.userId(), latitude, longitude, city, state, country, formattedAddress);
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(),
+                "Location updated successfully",
+                updated,
+                httpRequest.getRequestURI()
+        ));
+    }
+
+    /**
+     * Determines the content type based on the file extension.
+     *
+     * @param path the file path
+     * @return the MIME type string
+     */
+    private String determineContentType(String path) {
+        if (path.endsWith(".png")) {
+            return MediaType.IMAGE_PNG_VALUE;
+        } else if (path.endsWith(".webp")) {
+            return "image/webp";
+        }
+        return MediaType.IMAGE_JPEG_VALUE;
     }
 }

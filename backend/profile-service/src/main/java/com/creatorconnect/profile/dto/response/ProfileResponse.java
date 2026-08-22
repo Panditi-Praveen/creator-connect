@@ -34,7 +34,21 @@ public class ProfileResponse {
 
     private String profileImageUrl;
 
+    private String profileImagePath;
+
     private String location;
+
+    private Double latitude;
+
+    private Double longitude;
+
+    private String city;
+
+    private String state;
+
+    private String country;
+
+    private String formattedAddress;
 
     private String website;
 

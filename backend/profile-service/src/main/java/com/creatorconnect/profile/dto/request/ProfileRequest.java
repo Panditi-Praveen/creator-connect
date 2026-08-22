@@ -54,6 +54,22 @@ public class ProfileRequest {
     @Size(max = 100, message = "Location must not exceed 100 characters")
     private String location;
 
+    private Double latitude;
+
+    private Double longitude;
+
+    @Size(max = 100, message = "City must not exceed 100 characters")
+    private String city;
+
+    @Size(max = 100, message = "State must not exceed 100 characters")
+    private String state;
+
+    @Size(max = 100, message = "Country must not exceed 100 characters")
+    private String country;
+
+    @Size(max = 300, message = "Formatted address must not exceed 300 characters")
+    private String formattedAddress;
+
     @ValidUrl
     @Size(max = 300, message = "Website must not exceed 300 characters")
     private String website;

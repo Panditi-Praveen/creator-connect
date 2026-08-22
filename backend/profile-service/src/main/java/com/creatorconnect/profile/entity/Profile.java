@@ -104,9 +104,35 @@ public class Profile {
     @Column(name = "profile_image_url", length = 500)
     private String profileImageUrl;
 
+    @Size(max = 500, message = "Profile image path must not exceed 500 characters")
+    @Column(name = "profile_image_path", length = 500)
+    private String profileImagePath;
+
     @Size(max = 100, message = "Location must not exceed 100 characters")
     @Column(name = "location", length = 100)
     private String location;
+
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
+    @Size(max = 100, message = "City must not exceed 100 characters")
+    @Column(name = "city", length = 100)
+    private String city;
+
+    @Size(max = 100, message = "State must not exceed 100 characters")
+    @Column(name = "state", length = 100)
+    private String state;
+
+    @Size(max = 100, message = "Country must not exceed 100 characters")
+    @Column(name = "country", length = 100)
+    private String country;
+
+    @Size(max = 300, message = "Formatted address must not exceed 300 characters")
+    @Column(name = "formatted_address", length = 300)
+    private String formattedAddress;
 
     @Size(max = 300, message = "Website must not exceed 300 characters")
     @Column(name = "website", length = 300)
