@@ -93,6 +93,16 @@ public interface ProfileService {
     ProfileResponse uploadProfilePicture(UUID authenticatedUserId, MultipartFile file);
 
     /**
+     * Removes the authenticated user's profile picture.
+     *
+     * @param authenticatedUserId the caller's id (from the JWT)
+     * @return the updated profile projection with the image cleared
+     * @throws com.creatorconnect.profile.exception.ProfileNotFoundException
+     *         when the user has no profile
+     */
+    ProfileResponse deleteProfilePicture(UUID authenticatedUserId);
+
+    /**
      * Saves or updates the authenticated user's location details.
      *
      * @param authenticatedUserId the caller's id (from the JWT)

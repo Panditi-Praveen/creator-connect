@@ -41,6 +41,13 @@ export function uploadProfilePicture(file: File): Promise<ProfileResponse> {
 }
 
 /**
+ * Removes the authenticated user's profile picture.
+ */
+export function deleteProfilePicture(): Promise<ProfileResponse> {
+  return del<ProfileResponse>('/profile/me/photo')
+}
+
+/**
  * Saves or updates the authenticated user's location details.
  */
 export function updateLocation(params: {

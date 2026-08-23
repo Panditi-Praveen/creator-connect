@@ -42,6 +42,8 @@ app:
       model: ${OPENAI_MODEL:gpt-4o-mini}
       url: ${OPENAI_BASE_URL:https://api.openai.com/v1/chat/completions}
     max-results: 10
+    request-timeout-seconds: 60
+    max-retries: 2
 
 management:
   endpoints:

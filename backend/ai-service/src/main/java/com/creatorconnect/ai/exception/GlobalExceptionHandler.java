@@ -50,6 +50,20 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
+     * Handles AI rate-limit errors (HTTP 429 from the LLM provider).
+     *
+     * @param ex      the thrown exception carrying the retry-after value
+     * @param request the originating HTTP request
+     * @return {@code 429 TOO_MANY_REQUESTS} with a client-safe message and optional retry-after
+     */
+    @ExceptionHandler(RateLimitException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimit(RateLimitException ex,
+                                                         HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ErrorResponse.ofRateLimit(ex.getMessage(), request.getRequestURI(), ex.getRetryAfter()));
+    }
+
+    /**
      * Handles missing AI configuration (e.g. no {@code OPENAI_API_KEY}).
      *
      * @param ex      the thrown exception
@@ -193,6 +207,10 @@ public class GlobalExceptionHandler {
 
     /**
      * Preserves the status of framework exceptions that already carry one.
+     * 
+     * <p>Note: {@code ResponseStatusException(429)} is now handled by
+     * {@link #handleRateLimit} via {@link RateLimitException}, but this
+     * catch-all remains for any other RSE codes.
      *
      * @param ex      the thrown exception
      * @param request the originating HTTP request

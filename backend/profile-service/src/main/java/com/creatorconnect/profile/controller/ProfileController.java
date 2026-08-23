@@ -354,6 +354,41 @@ public class ProfileController {
     }
 
     /**
+     * Removes the authenticated user's profile picture.
+     *
+     * @param authentication the current security context
+     * @param httpRequest    the raw request
+     * @return {@code 200 OK} with the updated profile (no image)
+     */
+    @DeleteMapping("/me/photo")
+    @Operation(
+            summary = "Remove profile picture",
+            description = "Removes the profile picture for the authenticated user. "
+                    + "The stored file is deleted and the profile image fields are cleared."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "Profile picture removed"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "Missing or invalid JWT"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "Profile not found")
+    })
+    public ResponseEntity<ApiResponse<ProfileResponse>> deleteProfilePicture(
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+
+        ProfilePrincipal principal = (ProfilePrincipal) authentication.getPrincipal();
+        ProfileResponse updated = profileService.deleteProfilePicture(principal.userId());
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(),
+                "Profile picture removed successfully",
+                updated,
+                httpRequest.getRequestURI()
+        ));
+    }
+
+    /**
      * Serves the authenticated user's profile picture as a static resource.
      *
      * @param authentication the current security context

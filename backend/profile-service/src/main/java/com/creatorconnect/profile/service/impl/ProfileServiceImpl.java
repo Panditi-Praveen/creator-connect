@@ -138,6 +138,26 @@ public class ProfileServiceImpl implements ProfileService {
      */
     @Override
     @Transactional
+    public ProfileResponse deleteProfilePicture(UUID authenticatedUserId) {
+        Profile profile = profileRepository.findByUserId(authenticatedUserId)
+                .orElseThrow(() -> new ProfileNotFoundException(
+                        "Profile not found for user: " + authenticatedUserId));
+
+        // Delete the stored file if one exists
+        fileStorageService.deleteFile(profile.getProfileImagePath());
+
+        // Clear the image fields
+        profile.setProfileImagePath(null);
+        profile.setProfileImageUrl(null);
+
+        return profileMapper.toResponse(profileRepository.save(profile));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
     public ProfileResponse updateLocation(UUID authenticatedUserId, Double latitude, Double longitude,
                                           String city, String state, String country, String formattedAddress) {
         Profile profile = profileRepository.findByUserId(authenticatedUserId)

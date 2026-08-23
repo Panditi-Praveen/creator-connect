@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { discoverTalent } from '../api/ai'
 import { ApiError } from '../api/client'
 import type { TalentResult } from '../types/api'
@@ -12,6 +12,52 @@ const EXAMPLE_CHIPS = [
   'Brand designers with Figma skills',
 ]
 
+/** Classify an error into a user-friendly category and message. */
+function classifyError(err: unknown): { message: string; retryAfter?: number } {
+  if (err instanceof ApiError) {
+    // 429 — rate limit
+    if (err.status === 429) {
+      return {
+        message:
+          err.message ||
+          'AI is receiving too many requests. Please wait a moment and try again.',
+        retryAfter: err.retryAfter,
+      }
+    }
+    // 502 — LLM provider failure (quota exhausted / unavailable)
+    if (err.status === 502) {
+      return {
+        message:
+          'AI service quota is currently unavailable. Please try again later.',
+      }
+    }
+    // 503 — AI service not configured or profile service down
+    if (err.status === 503) {
+      return {
+        message:
+          'AI service is temporarily unavailable. Please try again later.',
+      }
+    }
+    // Any other ApiError — use the backend message
+    return { message: err.message }
+  }
+
+  // Network / unknown
+  if (err instanceof TypeError && err.message.includes('fetch')) {
+    return {
+      message:
+        'Unable to connect to the AI service. Please check your connection.',
+    }
+  }
+
+  return {
+    message:
+      err instanceof Error
+        ? err.message
+        : 'Something went wrong while discovering talent. Please try again.',
+  }
+}
+
 export default function AiDiscoveryPage() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<TalentResult[] | null>(null)
@@ -19,53 +65,85 @@ export default function AiDiscoveryPage() {
   const [lastQuery, setLastQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [unavailable, setUnavailable] = useState(false)
+  const [retryAfter, setRetryAfter] = useState(0)
 
-  const runDiscovery = async (trimmed: string) => {
-    setLoading(true)
-    setError(null)
-    setUnavailable(false)
-    setResults(null)
-    try {
-      const response = await discoverTalent(trimmed)
-      setResults(response.results)
-      setSearchedQuery(response.query)
-    } catch (err) {
-      // A 502 from the AI Service is the documented LLM-failure contract
-      // (OpenAI quota/availability) — NOT a connection failure. Show the
-      // friendly unavailable state and offer a retry.
-      if (err instanceof ApiError && err.status === 502) {
-        setUnavailable(true)
-      } else {
-        // Any other failure keeps its real message: network problems surface
-        // as "Unable to reach the server…", 401s redirect via the global
-        // handler, 400s show the backend validation message, etc.
-        setError(
-          err instanceof Error ? err.message : 'Discovery failed. Please try again.',
-        )
+  // Ref to guard against concurrent requests
+  const inFlightRef = useRef(false)
+  // Ref to track the latest request id so stale responses are discarded
+  const requestIdRef = useRef(0)
+
+  // Countdown timer for retry cooldown
+  useEffect(() => {
+    if (retryAfter <= 0) return
+    const id = setInterval(() => {
+      setRetryAfter((prev) => {
+        if (prev <= 1) {
+          clearInterval(id)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [retryAfter > 0]) // re-effect only when timer starts
+
+  const runDiscovery = useCallback(
+    async (trimmed: string) => {
+      // Prevent duplicate requests
+      if (inFlightRef.current) return
+      inFlightRef.current = true
+      const thisRequest = ++requestIdRef.current
+
+      setLoading(true)
+      setError(null)
+      setRetryAfter(0)
+      setResults(null)
+
+      try {
+        const response = await discoverTalent(trimmed)
+        // Discard stale responses
+        if (thisRequest !== requestIdRef.current) return
+        setResults(response.results)
+        setSearchedQuery(response.query)
+      } catch (err) {
+        if (thisRequest !== requestIdRef.current) return
+        const classified = classifyError(err)
+        setError(classified.message)
+        if (classified.retryAfter && classified.retryAfter > 0) {
+          setRetryAfter(classified.retryAfter)
+        }
+      } finally {
+        if (thisRequest === requestIdRef.current) {
+          setLoading(false)
+        }
+        inFlightRef.current = false
       }
-    } finally {
-      setLoading(false)
-    }
-  }
+    },
+    [],
+  )
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
     const trimmed = query.trim()
-    if (!trimmed) return
+    if (!trimmed || loading) return
     setLastQuery(trimmed)
     void runDiscovery(trimmed)
   }
 
   // Retry re-sends the exact same query through the existing API call.
   const handleRetry = () => {
-    if (!lastQuery) return
+    if (!lastQuery || loading || retryAfter > 0) return
     void runDiscovery(lastQuery)
   }
 
   const handleExample = (example: string) => {
     setQuery(example)
   }
+
+  const cooldownMessage =
+    retryAfter > 0
+      ? `Please try again in ${retryAfter} second${retryAfter === 1 ? '' : 's'}.`
+      : null
 
   return (
     <main className="page">
@@ -104,9 +182,13 @@ export default function AiDiscoveryPage() {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={loading || query.trim().length === 0}
+              disabled={loading || query.trim().length === 0 || retryAfter > 0}
             >
-              {loading ? 'Searching…' : '✨ Discover talent'}
+              {loading
+                ? 'Discovering talent...'
+                : retryAfter > 0
+                  ? `Wait ${retryAfter}s`
+                  : '✨ Discover talent'}
             </button>
           </div>
         </div>
@@ -116,7 +198,7 @@ export default function AiDiscoveryPage() {
         <div className="ai-loading" role="status">
           <span className="ai-spinner" aria-hidden="true" />
           <span className="ai-loading-text">
-            Finding the best matches
+            Discovering talent
             <span className="ai-dots" aria-hidden="true">
               <i />
               <i />
@@ -126,35 +208,55 @@ export default function AiDiscoveryPage() {
         </div>
       )}
 
-      {unavailable && (
-        <div className="empty" role="alert" style={{ marginTop: '1.25rem' }}>
-          <span className="empty-icon" aria-hidden="true">✨</span>
-          <span className="empty-title">AI recommendations are temporarily unavailable</span>
-          <p className="empty-desc">
-            The AI service is currently unavailable. Please try again later.
+      {error && !loading && (
+        <div
+          style={{
+            marginTop: '1.25rem',
+            background: 'var(--danger-bg)',
+            border: '1px solid #fecaca',
+            borderRadius: 'var(--radius-lg)',
+            padding: '1.25rem 1.4rem',
+          }}
+          role="alert"
+        >
+          <p
+            style={{
+              margin: 0,
+              fontWeight: 600,
+              color: 'var(--danger-strong)',
+              fontSize: '0.95rem',
+            }}
+          >
+            {error}
           </p>
+          {cooldownMessage && (
+            <p
+              style={{
+                margin: '0.35rem 0 0',
+                fontSize: '0.85rem',
+                color: 'var(--danger-ink)',
+              }}
+            >
+              {cooldownMessage}
+            </p>
+          )}
           <button
             type="button"
-            className="btn btn-primary"
-            disabled={loading}
+            className="btn btn-sm"
+            disabled={loading || retryAfter > 0}
             onClick={handleRetry}
+            style={{ marginTop: '0.75rem' }}
           >
-            {loading ? 'Retrying…' : 'Try again'}
+            {loading ? 'Retrying…' : retryAfter > 0 ? `Retry in ${retryAfter}s` : 'Retry'}
           </button>
         </div>
-      )}
-
-      {error && (
-        <p className="form-error" role="alert" style={{ marginTop: '1.25rem' }}>
-          {error}
-        </p>
       )}
 
       {results !== null && !loading && (
         <section style={{ marginTop: '1.75rem' }}>
           <div className="section-head">
             <h2>
-              Results for “{searchedQuery}”
+              Results for &ldquo;{searchedQuery}&rdquo;
               <span className="badge badge-ai" style={{ marginLeft: '0.6rem' }}>
                 {results.length}
               </span>

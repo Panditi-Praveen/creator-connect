@@ -19,6 +19,7 @@ export interface ErrorResponse {
   error: string
   message: string
   path: string
+  retryAfter?: number
 }
 
 export type Role = 'ADMIN' | 'CREATOR' | 'FREELANCER'

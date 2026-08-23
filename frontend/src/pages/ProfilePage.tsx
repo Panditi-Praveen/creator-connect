@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   createProfile,
+  deleteProfilePicture,
   getMyProfile,
   updateProfile,
   uploadProfilePicture,
@@ -9,7 +10,7 @@ import {
 import { ApiError } from '../api/client'
 import type { ProfileResponse } from '../types/api'
 import { useAuth } from '../hooks/useAuth'
-import { swalSuccess, swalError } from '../utils/notify'
+import { swalSuccess, swalError, swalConfirm } from '../utils/notify'
 
 type FormState = {
   firstName: string
@@ -55,6 +56,114 @@ function fromProfile(profile: ProfileResponse): FormState {
   }
 }
 
+/* --------------------------------------------------------------------------
+   Profile completion calculation
+   -------------------------------------------------------------------------- */
+
+interface CompletionFieldDef {
+  key: string
+  label: string
+  /** Weight determines contribution to 100%. */
+  weight: number
+  /** Return true when the field is filled. */
+  filled: (profile: ProfileResponse) => boolean
+}
+
+const COMPLETION_FIELDS: CompletionFieldDef[] = [
+  {
+    key: 'profilePicture',
+    label: 'Add a profile picture',
+    weight: 12,
+    filled: (p) => !!(p.profileImagePath || p.profileImageUrl),
+  },
+  {
+    key: 'firstName',
+    label: 'Add your first name',
+    weight: 5,
+    filled: (p) => !!p.firstName?.trim(),
+  },
+  {
+    key: 'lastName',
+    label: 'Add your last name',
+    weight: 5,
+    filled: (p) => !!p.lastName?.trim(),
+  },
+  {
+    key: 'headline',
+    label: 'Add a professional headline',
+    weight: 10,
+    filled: (p) => !!p.headline?.trim(),
+  },
+  {
+    key: 'bio',
+    label: 'Write a bio',
+    weight: 12,
+    filled: (p) => !!p.bio?.trim(),
+  },
+  {
+    key: 'location',
+    label: 'Add your location',
+    weight: 8,
+    filled: (p) => !!p.location?.trim(),
+  },
+  {
+    key: 'skills',
+    label: 'Add your skills',
+    weight: 12,
+    filled: (p) => !!p.skills?.trim(),
+  },
+  {
+    key: 'experience',
+    label: 'Add years of experience',
+    weight: 6,
+    filled: (p) => p.experience != null,
+  },
+  {
+    key: 'website',
+    label: 'Add your website',
+    weight: 10,
+    filled: (p) => !!p.website?.trim(),
+  },
+  {
+    key: 'linkedin',
+    label: 'Add your LinkedIn URL',
+    weight: 10,
+    filled: (p) => !!p.linkedin?.trim(),
+  },
+  {
+    key: 'github',
+    label: 'Add your GitHub URL',
+    weight: 5,
+    filled: (p) => !!p.github?.trim(),
+  },
+  {
+    key: 'availableForHire',
+    label: 'Set your availability',
+    weight: 5,
+    filled: () => true, // always defaults to true
+  },
+]
+
+interface CompletionInfo {
+  percentage: number
+  missingFields: string[]
+}
+
+function computeCompletion(profile: ProfileResponse | null): CompletionInfo {
+  if (!profile) return { percentage: 0, missingFields: COMPLETION_FIELDS.map((f) => f.label) }
+
+  let earned = 0
+  const missing: string[] = []
+  for (const field of COMPLETION_FIELDS) {
+    if (field.filled(profile)) {
+      earned += field.weight
+    } else {
+      missing.push(field.label)
+    }
+  }
+  return { percentage: Math.round(earned), missingFields: missing }
+}
+
 export default function ProfilePage() {
   const { user } = useAuth()
   const [profile, setProfile] = useState<ProfileResponse | null>(null)
@@ -65,8 +174,12 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [removingPhoto, setRemovingPhoto] = useState(false)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [showPhotoModal, setShowPhotoModal] = useState(false)
   const [fetchingLocation, setFetchingLocation] = useState(false)
+  const [skillInput, setSkillInput] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -105,6 +218,8 @@ export default function ProfilePage() {
       setProfile(updated)
       setForm(fromProfile(updated))
       setPhotoPreview(null)
+      setPendingFile(null)
+      setShowPhotoModal(false)
       await swalSuccess('Profile Picture Updated', 'Your profile picture has been uploaded successfully.')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to upload profile picture.'
@@ -131,15 +246,55 @@ export default function ProfilePage() {
       return
     }
 
-    // Show preview
+    // Show preview and open the confirm modal (do NOT auto-upload)
     const reader = new FileReader()
-    reader.onload = (e) => setPhotoPreview(e.target?.result as string)
+    reader.onload = (e) => {
+      setPhotoPreview(e.target?.result as string)
+      setPendingFile(file)
+      setShowPhotoModal(true)
+    }
     reader.readAsDataURL(file)
 
-    void handlePhotoUpload(file)
     // Reset the input so the same file can be re-selected
     event.target.value = ''
-  }, [handlePhotoUpload])
+  }, [])
+
+  const handleConfirmUpload = useCallback(() => {
+    if (!pendingFile || uploadingPhoto) return
+    void handlePhotoUpload(pendingFile)
+  }, [pendingFile, uploadingPhoto, handlePhotoUpload])
+
+  const handleCancelPreview = useCallback(() => {
+    setPhotoPreview(null)
+    setPendingFile(null)
+    setShowPhotoModal(false)
+  }, [])
+
+  const handleRemovePhoto = useCallback(async () => {
+    if (!profile?.profileImagePath || removingPhoto) return
+    const confirmed = await swalConfirm(
+      'Remove Profile Picture?',
+      'This will permanently remove your profile picture. You can upload a new one later.',
+      'Remove',
+    )
+    if (!confirmed) return
+
+    setRemovingPhoto(true)
+    try {
+      const updated = await deleteProfilePicture()
+      setProfile(updated)
+      setForm(fromProfile(updated))
+      setPhotoPreview(null)
+      setPendingFile(null)
+      setShowPhotoModal(false)
+      await swalSuccess('Photo Removed', 'Your profile picture has been removed.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to remove profile picture.'
+      await swalError('Remove Failed', message)
+    } finally {
+      setRemovingPhoto(false)
+    }
+  }, [profile?.profileImagePath, removingPhoto])
 
   const handleUseCurrentLocation = useCallback(async () => {
     if (!navigator.geolocation) {
@@ -159,26 +314,50 @@ export default function ProfilePage() {
 
       const { latitude, longitude } = position.coords
 
-      // Try reverse geocoding via a free API
+      // Reverse geocoding via OpenStreetMap Nominatim
       let city = ''
       let state = ''
       let country = ''
       let formattedAddress = ''
+      let readableLocation = ''
 
       try {
         const geoResponse = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`,
+          { headers: { 'Accept-Language': 'en' } },
         )
+        if (!geoResponse.ok) throw new Error(`Geocoding API responded with ${geoResponse.status}`)
         const geoData = await geoResponse.json()
         if (geoData.address) {
-          city = geoData.address.city || geoData.address.town || geoData.address.village || ''
-          state = geoData.address.state || ''
-          country = geoData.address.country || ''
+          const addr = geoData.address
+          city = addr.city || addr.town || addr.village || addr.municipality || ''
+          state = addr.state || ''
+          country = addr.country || ''
           formattedAddress = geoData.display_name || ''
+
+          // Build a clean, readable address from the best available fields
+          const parts: string[] = []
+          const suburbOrNeighbourhood = addr.suburb || addr.neighbourhood || addr.city_district || addr.hamlet || ''
+          if (suburbOrNeighbourhood) parts.push(suburbOrNeighbourhood)
+          if (city && suburbOrNeighbourhood !== city) parts.push(city)
+          if (state && state !== city) parts.push(state)
+          if (country) parts.push(country)
+          readableLocation = parts.join(', ')
         }
-      } catch {
-        // Geocoding failed — still save coordinates
+
+        if (!readableLocation) {
+          throw new Error('Could not determine a readable address from the coordinates.')
+        }
+      } catch (geoErr) {
+        // Geocoding failed — show a meaningful error instead of silently displaying coordinates
+        const msg = geoErr instanceof Error ? geoErr.message : 'Reverse geocoding failed.'
+        await swalError('Address Lookup Failed', `${msg} Location coordinates were captured but could not be converted to a readable address.`)
+        setFetchingLocation(false)
+        return
       }
+
+      // Update the form's location field so the user sees the readable name
+      setField('location', readableLocation)
 
       const updated = await updateLocation({
         latitude,
@@ -189,8 +368,8 @@ export default function ProfilePage() {
         formattedAddress,
       })
       setProfile(updated)
-      setForm(fromProfile(updated))
-      await swalSuccess('Location Updated', 'Your current location has been saved successfully.')
+      setForm(() => ({ ...fromProfile(updated), location: readableLocation }))
+      await swalSuccess('Location Updated', `Your current location has been saved as: ${readableLocation}`)
     } catch (err) {
       if (err instanceof GeolocationPositionError) {
         let message = 'Unable to retrieve your location.'
@@ -206,6 +385,52 @@ export default function ProfilePage() {
       setFetchingLocation(false)
     }
   }, [])
+
+  /* ---- Skills helpers ---- */
+  const skillTags: string[] = useMemo(
+    () =>
+      form.skills
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [form.skills],
+  )
+
+  const syncSkills = (tags: string[]) => {
+    // Deduplicate while preserving order
+    const unique = [...new Set(tags.map((t) => t.trim()).filter(Boolean))]
+    setField('skills', unique.join(', '))
+  }
+
+  const addSkillsFromText = useCallback(
+    (raw: string) => {
+      const newTags = raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (newTags.length === 0) return
+      syncSkills([...skillTags, ...newTags])
+      setSkillInput('')
+    },
+    [skillTags],
+  )
+
+  const removeSkill = useCallback(
+    (skill: string) => {
+      syncSkills(skillTags.filter((t) => t !== skill))
+    },
+    [skillTags],
+  )
+
+  const handleSkillKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        addSkillsFromText(skillInput)
+      }
+    },
+    [addSkillsFromText, skillInput],
+  )
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -245,6 +470,13 @@ export default function ProfilePage() {
     }
   }
 
+  // All hooks must be called before any early returns (Rules of Hooks).
+  const editing = hasProfile === true
+  const { percentage: completionPct, missingFields } = useMemo(
+    () => computeCompletion(profile),
+    [profile],
+  )
+
   if (loading) {
     return (
       <main className="page">
@@ -272,22 +504,6 @@ export default function ProfilePage() {
       </main>
     )
   }
-
-  const editing = hasProfile === true
-  const completionFields: Array<keyof ProfileResponse> = [
-    'headline', 'bio', 'location', 'website', 'linkedin', 'github', 'skills',
-    'experience',
-  ]
-  const completion = profile
-    ? Math.round(
-        (completionFields.filter((field) => {
-          const value = profile[field]
-          return value !== undefined && value !== null && value !== ''
-        }).length /
-          completionFields.length) *
-          100,
-      )
-    : 0
   const skillList = (profile?.skills ?? '')
     .split(',')
     .map((skill) => skill.trim())
@@ -324,7 +540,7 @@ export default function ProfilePage() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingPhoto}
+                disabled={uploadingPhoto || removingPhoto}
                 className="btn btn-sm btn-ghost"
                 style={{
                   position: 'absolute',
@@ -339,7 +555,7 @@ export default function ProfilePage() {
                   boxShadow: 'var(--shadow-sm)',
                   cursor: 'pointer',
                 }}
-                title="Upload photo"
+                title={profile?.profileImagePath ? 'Replace photo' : 'Upload photo'}
               >
                 {uploadingPhoto ? '...' : '📷'}
               </button>
@@ -350,6 +566,28 @@ export default function ProfilePage() {
                 onChange={handlePhotoFileChange}
                 style={{ display: 'none' }}
               />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '-32px', marginLeft: '82px' }}>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto || removingPhoto}
+                className="btn btn-sm btn-ghost"
+                style={{ fontSize: '0.78rem', padding: '0.2rem 0.6rem', width: 'fit-content' }}
+              >
+                {uploadingPhoto ? 'Uploading…' : profile?.profileImagePath ? '📷 Replace Photo' : '📷 Change Photo'}
+              </button>
+              {profile?.profileImagePath && (
+                <button
+                  type="button"
+                  onClick={() => void handleRemovePhoto()}
+                  disabled={uploadingPhoto || removingPhoto}
+                  className="btn btn-sm btn-ghost"
+                  style={{ fontSize: '0.78rem', padding: '0.2rem 0.6rem', width: 'fit-content', color: 'var(--danger-ink, #dc2626)' }}
+                >
+                  {removingPhoto ? 'Removing…' : '🗑️ Remove Photo'}
+                </button>
+              )}
             </div>
             <div className="profile-head-info">
               <h1>
@@ -368,7 +606,7 @@ export default function ProfilePage() {
           </div>
           <div className="profile-stats">
             <div className="profile-stat">
-              <div className="ps-value">{completion}%</div>
+              <div className="ps-value">{completionPct}%</div>
               <div className="ps-label">Complete</div>
             </div>
             <div className="profile-stat">
@@ -406,6 +644,80 @@ export default function ProfilePage() {
           </p>
         </div>
       </header>
+
+      {/* ---------- Profile Strength card ---------- */}
+      {editing && (
+        <section
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '1.35rem 1.5rem',
+            boxShadow: 'var(--shadow-sm)',
+            marginBottom: '1.25rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
+            <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Profile Strength</h2>
+            <span
+              style={{
+                fontWeight: 800,
+                fontSize: '1.15rem',
+                color: completionPct === 100
+                  ? 'var(--success-strong)'
+                  : completionPct >= 70
+                    ? 'var(--primary-600)'
+                    : 'var(--ink-600)',
+              }}
+            >
+              {completionPct}%
+            </span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="progress-track" style={{ marginBottom: '0.75rem' }}>
+            <div
+              className="progress-fill"
+              style={{
+                width: `${completionPct}%`,
+                background: completionPct === 100
+                  ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+                  : undefined,
+              }}
+            />
+          </div>
+
+          {completionPct === 100 ? (
+            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--success-strong)', fontWeight: 600 }}>
+              ✅ Your profile is complete!
+            </p>
+          ) : (
+            <>
+              <p className="muted" style={{ margin: '0 0 0.5rem', fontSize: '0.88rem' }}>
+                Complete your profile to increase your visibility.
+              </p>
+              <ul style={{ margin: 0, padding: '0 0 0 1.15rem', listStyle: 'none' }}>
+                {missingFields.map((label) => (
+                  <li
+                    key={label}
+                    style={{
+                      fontSize: '0.84rem',
+                      color: 'var(--ink-600)',
+                      padding: '0.15rem 0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                    }}
+                  >
+                    <span style={{ color: 'var(--ink-400)', fontSize: '0.7rem' }}>○</span>
+                    {label}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
 
       {success && (
         <p className="form-success" role="status">
@@ -491,11 +803,11 @@ export default function ProfilePage() {
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1rem' }}>Current Location</h3>
                   <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: '0.85rem' }}>
-                    {profile.latitude && profile.longitude
-                      ? `${profile.latitude.toFixed(4)}, ${profile.longitude.toFixed(4)}`
-                      : 'No location set'}
-                    {profile.city ? ` · ${profile.city}` : ''}
-                    {profile.country ? `, ${profile.country}` : ''}
+                    {fetchingLocation
+                      ? '⏳ Detecting your location...'
+                      : form.location || (profile?.latitude && profile?.longitude
+                        ? [profile?.city, profile?.state, profile?.country].filter(Boolean).join(', ') || 'Location saved'
+                        : 'No location set')}
                   </p>
                 </div>
                 <button
@@ -505,7 +817,7 @@ export default function ProfilePage() {
                   disabled={fetchingLocation}
                 >
                   {fetchingLocation ? (
-                    <>⏳ Fetching...</>
+                    <>⏳ Detecting your location...</>
                   ) : (
                     <>📍 Use My Current Location</>
                   )}
@@ -515,13 +827,64 @@ export default function ProfilePage() {
           )}
 
           <div className="field" style={{ marginTop: '1rem' }}>
-            <label htmlFor="skills">Skills (comma separated)</label>
+            <label htmlFor="skills">Skills</label>
+            {/* Rendered skill tags */}
+            {skillTags.length > 0 && (
+              <div className="tags" style={{ marginBottom: '0.5rem' }}>
+                {skillTags.map((skill) => (
+                  <span
+                    key={skill}
+                    className="tag"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      paddingRight: '0.35rem',
+                    }}
+                  >
+                    {skill}
+                    <button
+                      type="button"
+                      onClick={() => removeSkill(skill)}
+                      aria-label={`Remove ${skill}`}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--ink-400)',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontSize: '0.9rem',
+                        lineHeight: 1,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        transition: 'color var(--t) var(--ease)',
+                      }}
+                      onMouseEnter={(e) => { (e.target as HTMLElement).style.color = 'var(--danger-ink)' }}
+                      onMouseLeave={(e) => { (e.target as HTMLElement).style.color = 'var(--ink-400)' }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* Input for adding new skills */}
             <input
               id="skills"
-              placeholder="e.g. Premiere Pro, After Effects"
-              value={form.skills}
-              onChange={(event) => setField('skills', event.target.value)}
+              name="profile-skills-input"
+              autoComplete="off"
+              placeholder="Type a skill and press Enter"
+              value={skillInput}
+              onChange={(event) => setSkillInput(event.target.value)}
+              onKeyDown={handleSkillKeyDown}
+              onBlur={() => {
+                // Also add on blur (e.g. user tabs away with unsubmitted text)
+                if (skillInput.trim()) addSkillsFromText(skillInput)
+              }}
             />
+            <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: '0.78rem' }}>
+              Press Enter or comma to add skills. {skillTags.length > 0 && `${skillTags.length} skill${skillTags.length === 1 ? '' : 's'} added.`}
+            </p>
           </div>
 
           <div className="form-grid" style={{ marginTop: '1rem' }}>
@@ -581,6 +944,77 @@ export default function ProfilePage() {
           </button>
         </div>
       </form>
+
+      {/* -------- Photo preview / confirm modal -------- */}
+      {showPhotoModal && photoPreview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Profile picture preview"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(4px)',
+          }}
+          onClick={handleCancelPreview}
+        >
+          <div
+            style={{
+              background: 'var(--surface, #fff)',
+              borderRadius: 'var(--radius-lg, 12px)',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
+              padding: '1.5rem',
+              maxWidth: 380,
+              width: '90%',
+              textAlign: 'center',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem' }}>Preview Profile Picture</h3>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+              <img
+                src={photoPreview}
+                alt="Preview"
+                style={{
+                  width: 140,
+                  height: 140,
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '3px solid var(--primary-400, #818cf8)',
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+                }}
+              />
+            </div>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.88rem', color: 'var(--ink-600, #475569)' }}>
+              {pendingFile?.name}
+              {pendingFile && ` (${(pendingFile.size / 1024 / 1024).toFixed(1)} MB)`}
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={handleCancelPreview}
+                disabled={uploadingPhoto}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleConfirmUpload}
+                disabled={uploadingPhoto}
+              >
+                {uploadingPhoto ? 'Uploading…' : '✓ Confirm Upload'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

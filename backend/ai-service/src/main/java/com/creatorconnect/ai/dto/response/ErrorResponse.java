@@ -31,13 +31,15 @@ public final class ErrorResponse {
     private final String error;
     private final String message;
     private final String path;
+    private final Integer retryAfter;
 
-    private ErrorResponse(LocalDateTime timestamp, int status, String error, String message, String path) {
+    private ErrorResponse(LocalDateTime timestamp, int status, String error, String message, String path, Integer retryAfter) {
         this.timestamp = timestamp;
         this.status = status;
         this.error = error;
         this.message = message;
         this.path = path;
+        this.retryAfter = retryAfter;
     }
 
     /**
@@ -54,7 +56,27 @@ public final class ErrorResponse {
                 status.value(),
                 status.getReasonPhrase(),
                 message,
-                path
+                path,
+                null
+        );
+    }
+
+    /**
+     * Builds a rate-limit {@link ErrorResponse} that includes a retry-after hint.
+     *
+     * @param message    the human-readable error message
+     * @param path       the request URI that failed
+     * @param retryAfter seconds the client should wait before retrying (may be {@code null})
+     * @return a populated {@link ErrorResponse}
+     */
+    public static ErrorResponse ofRateLimit(String message, String path, Integer retryAfter) {
+        return new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.TOO_MANY_REQUESTS.value(),
+                HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase(),
+                message,
+                path,
+                retryAfter
         );
     }
 }

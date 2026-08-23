@@ -26,6 +26,17 @@ public class AiProperties {
     private int maxResults = 10;
 
     /**
+     * HTTP request timeout in seconds for calls to the LLM provider.
+     */
+    private int requestTimeoutSeconds = 60;
+
+    /**
+     * Maximum number of automatic retries on transient 429 rate-limit errors.
+     * Retries are NOT attempted for quota exhaustion, invalid API key, or server errors.
+     */
+    private int maxRetries = 2;
+
+    /**
      * External LLM (OpenAI) connection settings.
      */
     private final OpenAi openai = new OpenAi();

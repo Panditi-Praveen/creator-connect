@@ -21,6 +21,7 @@ export class ApiError extends Error {
   readonly error: string
   readonly path: string
   readonly timestamp: string
+  readonly retryAfter?: number
 
   constructor(body: ErrorResponse) {
     super(body.message)
@@ -29,6 +30,7 @@ export class ApiError extends Error {
     this.error = body.error
     this.path = body.path
     this.timestamp = body.timestamp
+    this.retryAfter = body.retryAfter
   }
 }
 
@@ -102,6 +104,7 @@ const FALLBACK_MESSAGES: Record<number, string> = {
   403: 'You do not have permission to perform this action.',
   404: 'The requested resource was not found.',
   409: 'This action conflicts with an existing record.',
+  429: 'AI is receiving too many requests. Please wait a moment and try again.',
   500: 'Something went wrong on the server. Please try again.',
   // 502 covers the AI Service's documented LLM-failure contract (OpenAI
   // quota/availability) and any other upstream failure. Pages may override
