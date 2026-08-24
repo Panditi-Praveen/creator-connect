@@ -2,6 +2,7 @@ package com.creatorconnect.auth.controller;
 
 import com.creatorconnect.auth.config.SecurityBeansConfig;
 import com.creatorconnect.auth.repository.UserRepository;
+import com.creatorconnect.auth.security.JwtAuthenticationEntryPoint;
 import com.creatorconnect.auth.security.JwtAuthenticationFilter;
 import com.creatorconnect.auth.security.JwtService;
 import com.creatorconnect.auth.service.AuthService;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
@@ -57,10 +59,10 @@ class AuthControllerTest {
     }
 
     /**
-     * Supplies the {@link JwtAuthenticationFilter} the production
-     * {@link SecurityBeansConfig} still references in its disabled
-     * {@code FilterRegistrationBean}. The filter itself is not part of the
-     * auth security chain (auth endpoints are public), so the mocks are never
+     * Supplies the {@link JwtAuthenticationFilter} and
+     * {@link JwtAuthenticationEntryPoint} the production
+     * {@link SecurityBeansConfig} references. The filter is not part of the
+     * auth security chain for public endpoints, so the mocks are never
      * exercised.
      */
     @TestConfiguration
@@ -69,6 +71,11 @@ class AuthControllerTest {
         @Bean
         JwtAuthenticationFilter jwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository) {
             return new JwtAuthenticationFilter(jwtService, userRepository);
+        }
+
+        @Bean
+        JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint(ObjectMapper objectMapper) {
+            return new JwtAuthenticationEntryPoint(objectMapper);
         }
     }
 }

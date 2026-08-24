@@ -2,10 +2,12 @@ package com.creatorconnect.profile.controller;
 
 import com.creatorconnect.profile.config.SecurityBeansConfig;
 import com.creatorconnect.profile.dto.response.ProfileResponse;
+import com.creatorconnect.profile.repository.ProfileRepository;
 import com.creatorconnect.profile.security.JwtAuthenticationEntryPoint;
 import com.creatorconnect.profile.security.JwtAuthenticationFilter;
 import com.creatorconnect.profile.security.JwtService;
 import com.creatorconnect.profile.service.ProfileService;
+import com.creatorconnect.profile.service.impl.FileStorageService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +54,12 @@ class ProfileControllerTest {
 
     @MockBean
     private ProfileService profileService;
+
+    @MockBean
+    private FileStorageService fileStorageService;
+
+    @MockBean
+    private ProfileRepository profileRepository;
 
     @MockBean
     private JwtService jwtService;

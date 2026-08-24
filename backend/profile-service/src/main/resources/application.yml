@@ -6,9 +6,9 @@ spring:
     name: profile-service
 
   datasource:
-    url: ${MYSQL_URL:jdbc:mysql://localhost:3307/creatorconnect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/creatorconnect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD}
+    password: Praveen@0417
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
@@ -17,9 +17,15 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
     show-sql: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
 
   jackson:
     default-property-inclusion: non_null
@@ -61,20 +67,19 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,env,metrics
+        include: health,info
   endpoint:
     health:
-      show-details: always
-      show-components: always
-  info:
-    env:
-      enabled: true
+      show-details: never
+      show-components: never
 
 springdoc:
-  swagger-ui:
-    path: /swagger-ui.html
   api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+    path: /swagger-ui.html
 
 info:
   app:

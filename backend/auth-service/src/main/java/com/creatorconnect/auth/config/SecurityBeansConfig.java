@@ -1,5 +1,6 @@
 package com.creatorconnect.auth.config;
 
+import com.creatorconnect.auth.security.JwtAuthenticationEntryPoint;
 import com.creatorconnect.auth.security.JwtAuthenticationFilter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -10,24 +11,23 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * Spring Security configuration for the Auth Service.
  *
- * <p>Day 4 scope — exposes two beans:
  * <ul>
  *   <li><b>{@link PasswordEncoder}</b> — a {@link BCryptPasswordEncoder}
- *       (strength 10) used to hash user passwords before persistence. BCrypt is
- *       intentionally slow and salted, which is the recommended choice for
- *       password storage.</li>
+ *       (strength 10) used to hash user passwords before persistence.</li>
  *   <li><b>{@link SecurityFilterChain}</b> — a stateless chain that permits the
- *       public registration/login endpoints (plus actuator health and Swagger
- *       UI) while keeping every other route authenticated. This is the Day 4/5
- *       baseline; once protected endpoints land, the chain is tightened to
- *       enforce bearer tokens via the prepared {@link JwtAuthenticationFilter}.</li>
+ *       public registration/login endpoints (plus actuator health/info and
+ *       Swagger UI) while keeping every other route (including
+ *       {@code /auth/users/{userId}}) authenticated via a JWT bearer token.
+ *       Unauthenticated access returns a JSON 401 via
+ *       {@link JwtAuthenticationEntryPoint}.</li>
  *   <li><b>{@link #jwtAuthenticationFilterRegistration(JwtAuthenticationFilter)}</b>
  *       — keeps Spring Boot from auto-registering the prepared JWT filter as a
- *       servlet-level filter before Day 6 wires it into the chain.</li>
+ *       servlet-level filter (it is wired into the chain explicitly).</li>
  * </ul>
  *
  * <p>CSRF is disabled because the API is stateless (no cookies) and all
@@ -49,16 +49,27 @@ public class SecurityBeansConfig {
     /**
      * Defines which endpoints are reachable without authentication.
      *
-     * @param http the {@link HttpSecurity} builder
+     * <p>Only registration, login, actuator health/info, and Swagger are
+     * public. Every other route (including {@code /auth/users/{userId}})
+     * requires a valid JWT. Unauthenticated access returns a JSON 401
+     * via {@link JwtAuthenticationEntryPoint}.
+     *
+     * @param http          the {@link HttpSecurity} builder
+     * @param jwtFilter     the bearer-token authentication filter
+     * @param entryPoint    the {@code 401} JSON writer
      * @return the configured security filter chain
      * @throws Exception when the chain cannot be built
      */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                   JwtAuthenticationFilter jwtFilter,
+                                                   JwtAuthenticationEntryPoint entryPoint) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(handling ->
+                        handling.authenticationEntryPoint(entryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/register",
@@ -69,18 +80,15 @@ public class SecurityBeansConfig {
                                 "/swagger-ui.html",
                                 "/swagger-ui/**"
                         ).permitAll()
-                        .anyRequest().authenticated());
+                        .anyRequest().authenticated())
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
     /**
-     * Disables auto-registration of the prepared {@link JwtAuthenticationFilter}.
-     *
-     * <p>Without this guard, Spring Boot treats any {@code Filter} bean in the
-     * context as a servlet-level filter and runs it for every request. The JWT
-     * filter is intentionally not active until Day 6 wires it into the chain,
-     * so it is registered with {@code enabled = false} and only becomes a
-     * usable dependency.
+     * Disables auto-registration of the {@link JwtAuthenticationFilter} as a
+     * servlet-level filter (it is wired into the {@code SecurityFilterChain}
+     * explicitly).
      *
      * @param filter the prepared JWT filter bean
      * @return a registration that disables servlet-level filtering

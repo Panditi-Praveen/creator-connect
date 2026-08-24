@@ -43,6 +43,7 @@ export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? ''
 
 const http: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 30_000, // 30-second default timeout for all requests
 })
 
 // Attach the stored JWT to every request as `Authorization: Bearer <token>`.
@@ -94,6 +95,15 @@ http.interceptors.response.use(
 
     // No HTTP response at all (network down, CORS block, timeout, aborted):
     // only this case is a genuine connection failure.
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return Promise.reject(new ApiError({
+        timestamp: new Date().toISOString(),
+        status: 0,
+        error: 'Timeout',
+        message: 'The request timed out. Please try again.',
+        path: error.config?.url ?? '',
+      }))
+    }
     return Promise.reject(new ApiError(buildFallbackError(error)))
   },
 )

@@ -6,10 +6,11 @@ spring:
     name: auth-service
 
   datasource:
-    url: ${MYSQL_URL:jdbc:mysql://localhost:3307/creatorconnect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD}
+    url: jdbc:mysql://localhost:3306/creatorconnect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: root
+    password: Praveen@0417
     driver-class-name: com.mysql.cj.jdbc.Driver
+
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -17,14 +18,21 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
     show-sql: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
 
   jackson:
     default-property-inclusion: non_null
     serialization:
       write-dates-as-timestamps: false
+
 
 eureka:
   client:
@@ -33,39 +41,43 @@ eureka:
     register-with-eureka: true
     fetch-registry: true
     registry-fetch-interval-seconds: 5
+
   instance:
     hostname: localhost
     prefer-ip-address: true
     lease-renewal-interval-in-seconds: 5
     lease-expiration-duration-in-seconds: 10
 
-# JWT configuration — consumed by config.JwtProperties and the security layer
-# APP_JWT_SECRET (required): strong, randomly generated base64 key (>= 32 bytes / 256 bits).
-# Generate with: openssl rand -base64 64  (or python: base64.b64encode(secrets.token_bytes(64)).decode())
+
+# JWT configuration
 app:
   jwt:
     secret: ${APP_JWT_SECRET}
     expiration-ms: 86400000
     issuer: creatorconnect-auth-service
 
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,env,metrics
+        include: health,info
+
   endpoint:
     health:
-      show-details: always
-      show-components: always
-  info:
-    env:
-      enabled: true
+      show-details: never
+      show-components: never
+
 
 springdoc:
-  swagger-ui:
-    path: /swagger-ui.html
   api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
+
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+    path: /swagger-ui.html
+
 
 info:
   app:
@@ -76,11 +88,13 @@ info:
     spring-boot-version: 3.5.16
     spring-cloud-version: 2025.0.3
 
+
 logging:
   level:
     com.creatorconnect.auth: DEBUG
     com.netflix.discovery: INFO
     com.netflix.eureka: INFO
     org.hibernate.SQL: WARN
+
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

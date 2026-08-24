@@ -75,6 +75,16 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Flyway — database migrations -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
         <!-- JWT (JJWT) — API at compile time, impl + Jackson at runtime.
              The Project Service only *validates* tokens issued by the Auth Service,
              so only the parser side of the library is exercised. -->

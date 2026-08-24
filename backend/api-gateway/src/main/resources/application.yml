@@ -58,15 +58,12 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway,env,metrics
+        include: health,info,gateway
   endpoint:
     health:
-      show-details: always
-      show-components: always
+      show-details: never
+      show-components: never
     gateway:
-      enabled: true
-  info:
-    env:
       enabled: true
 
 info:

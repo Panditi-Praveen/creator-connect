@@ -49,20 +49,19 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,env,metrics
+        include: health,info
   endpoint:
     health:
-      show-details: always
-      show-components: always
-  info:
-    env:
-      enabled: true
+      show-details: never
+      show-components: never
 
 springdoc:
-  swagger-ui:
-    path: /swagger-ui.html
   api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+    path: /swagger-ui.html
 
 info:
   app:
