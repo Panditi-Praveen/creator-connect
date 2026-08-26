@@ -58,13 +58,7 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.message").value("Resource not found"));
     }
 
-    /**
-     * Supplies the {@link JwtAuthenticationFilter} and
-     * {@link JwtAuthenticationEntryPoint} the production
-     * {@link SecurityBeansConfig} references. The filter is not part of the
-     * auth security chain for public endpoints, so the mocks are never
-     * exercised.
-     */
+
     @TestConfiguration
     static class SecurityTestConfig {
 
