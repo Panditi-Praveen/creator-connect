@@ -36,12 +36,26 @@ public class AuthController {
 
     private final AuthService authService;
 
-
+    /**
+     * Creates the controller with its service dependency.
+     *
+     * @param authService the registration business logic
+     */
     public AuthController(AuthService authService) {
         this.authService = authService;
     }
 
-
+    /**
+     * Registers a new user.
+     *
+     * <p>Returns {@code 201 CREATED} with a success envelope containing the
+     * persisted user projection. Duplicate emails yield {@code 409 CONFLICT},
+     * invalid payloads {@code 400 BAD_REQUEST} — both handled globally.
+     *
+     * @param request     the validated registration payload
+     * @param httpRequest the raw request (used to echo the request path)
+     * @return {@code 201 CREATED} with the registration result
+     */
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<RegisterResponse>> register(
             @Valid @RequestBody RegisterRequest request,
